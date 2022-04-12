@@ -20,6 +20,7 @@ encoded,buffer = cv2.imencode('.jpg',frame,[cv2.IMWRITE_JPEG_QUALITY,50])
 print(buffer.shape)
 
 msg = base64.b64encode(buffer)
+print(len(msg))
 
 data = base64.b64decode(msg,' /')
 npdata = np.frombuffer(data,dtype=np.uint8)
