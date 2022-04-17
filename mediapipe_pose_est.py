@@ -135,8 +135,10 @@ with mp_pose.Pose(
         print(finalY)
 
     # Super impose ball on frame
-    ex = min(int(finalX*1920), 1920)
-    ey = min(int(finalY*1080), 1080)
+    ex = min(int(finalX*1920), 1920-width)
+    ey = min(int(finalY*1080), 1080-height)
+    print(ex)
+    print(ey)
     if not init_pose_bool:
       image[ey:ey+height, ex:ex+width, :] = image[ey:ey+height, ex:ex+width, :] * (1 - ball_alpha) + ball * ball_alpha
     # Display annotated image
