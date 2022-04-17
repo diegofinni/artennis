@@ -5,6 +5,7 @@ mp_drawing_styles = mp.solutions.drawing_styles
 mp_pose = mp.solutions.pose
 import time
 import math
+import numpy as np
 
 def physicsCalc(init_pose, final_pose, deltaT):
   # physics
@@ -53,21 +54,32 @@ def physicsCalc(init_pose, final_pose, deltaT):
 
   return finalX, finalY
 
-# def addBallImage(frame, zone):
-#   # Add the ball to specified pose
-#   # Pose is approximated to a total of 4 zones
-#   # TO-DO: If pose is egregiously out of bounds return out of bounds true 
-
-
 cap = cv2.VideoCapture(0)
 cap.set(3, 1920)
 cap.set(4, 1080)
 record_pose = False
 record_start = 0
 val = 0
+
 # Init Pose Bool
 init_pose_bool = False    
 init_pose = 0
+final_pose = 0
+finalX = 0
+finalY = 0
+
+# Initialize Image
+ball = cv2.imread(r'ball.png', cv2.IMREAD_UNCHANGED)
+scale_percent = 20 # percent of original size
+width = int(ball.shape[1] * scale_percent / 100)
+height = int(ball.shape[0] * scale_percent / 100)
+dim = (width, height)
+# resize image
+ball = cv2.resize(ball, dim, interpolation = cv2.INTER_AREA)
+# Prepare pixel-wise alpha blending
+ball_alpha = ball[..., 3] / 255.0
+ball_alpha = np.repeat(ball_alpha[..., np.newaxis], 3, axis=2)
+ball = ball[..., :3]
 
 with mp_pose.Pose(
     min_detection_confidence=0.5,
@@ -83,8 +95,6 @@ with mp_pose.Pose(
       # If loading a video, use 'break' instead of 'continue'.
       continue
     image_height, image_width, _ = image.shape
-    # print(image_height)
-    # print(image_width)
 
     # To improve performance, optionally mark the image as not writeable to
     # pass by reference.
@@ -118,11 +128,17 @@ with mp_pose.Pose(
         print("InitPose")
         print(init_pose.x)
         print(init_pose.y)
+        # Calculate ball
         finalX, finalY = physicsCalc(init_pose,final_pose, deltaT)
         print("FinalPose")
         print(finalX)
         print(finalY)
 
+    # Super impose ball on frame
+    ex = min(int(finalX*1920), 1920)
+    ey = min(int(finalY*1080), 1080)
+    if not init_pose_bool:
+      image[ey:ey+height, ex:ex+width, :] = image[ey:ey+height, ex:ex+width, :] * (1 - ball_alpha) + ball * ball_alpha
     # Display annotated image
     cv2.imshow('MediaPipe Pose', cv2.flip(image, 1))
     val = cv2.waitKey(1)
