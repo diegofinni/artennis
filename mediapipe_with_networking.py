@@ -146,7 +146,15 @@ def sendRoutine(piClient: piclient.zmq.sugar.socket.Socket):
                 # Display annotated image
                 image = cv2.flip(image, 1)
                 # cv2.imshow('MediaPipe Pose', cv2.flip(image, 1))
-                piClient.sendSocket.send_image(image) #Send annotated image
+                if image.flags['C_CONTIGUOUS']:
+                    # if image is already contiguous in memory just send it
+                    piClient.sendSocket.send_array(image, copy=False)
+                else:
+                    # else make it contiguous before sending
+                    image = np.ascontiguousarray(image)
+                    piClient.sendSocket.send(image, copy=False)
+                
+                # piClient.sendSocket.send_image(image) #Send annotated image
                 val = cv2.waitKey(1)
                 # time.sleep(1)
     cam.release()
@@ -154,7 +162,7 @@ def sendRoutine(piClient: piclient.zmq.sugar.socket.Socket):
 def recvRoutine(piClient: piclient.zmq.sugar.socket.Socket):
     while piClient.running:
         try:
-            image = piClient.recvSocket.recv_image(piclient.zmq.NOBLOCK)
+            image = piClient.recvSocket.recv(piclient.zmq.NOBLOCK)
             cv2.imshow('MediaPipe Pose', image)
         except piclient.zmq.ZMQError as e:
             pass
