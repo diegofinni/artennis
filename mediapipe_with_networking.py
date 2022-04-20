@@ -1,3 +1,4 @@
+import sys
 import cv2
 import mediapipe as mp
 mp_drawing = mp.solutions.drawing_utils
@@ -6,7 +7,8 @@ mp_pose = mp.solutions.pose
 import time
 import math
 import numpy as np
-import piclient
+import zmq
+from piclient import PiClient
 
 # Global variables
 record_pose = False
@@ -18,6 +20,25 @@ init_pose = 0
 final_pose = 0
 finalX = 0
 finalY = 0
+
+def send_array(socket, A, flags=0, copy=True, track=False, sendOrRecieve, ballPosition):
+    """send a numpy array with metadata"""
+    md = dict(
+        dtype = str(A.dtype),
+        shape = A.shape,
+        sendOrRecieve = sendOrRecieve,
+        ballPosition = ballPosition,
+    )
+    socket.send_json(md, flags|zmq.SNDMORE)
+    return socket.send(A, flags, copy=copy, track=track)
+
+def recv_array(socket, flags=0, copy=True, track=False):
+    """recv a numpy array"""
+    md = socket.recv_json(flags=flags)
+    msg = socket.recv(flags=flags, copy=copy, track=track)
+    buf = buffer(msg)
+    A = numpy.frombuffer(buf, dtype=md['dtype'])
+    return A.reshape(md['shape']), md.sendOrRecieve, md.ballPostion
 
 def physicsCalc(init_pose, final_pose, deltaT):
   # physics
@@ -65,7 +86,7 @@ def physicsCalc(init_pose, final_pose, deltaT):
 
   return finalX, finalY
 
-def sendRoutine(piClient: piclient.zmq.sugar.socket.Socket):
+def sendRoutine(piClient: PiClient):
     # Initialize Camera
     cam = cv2.VideoCapture(0)
     cam.set(3, 1920)
@@ -155,47 +176,36 @@ def sendRoutine(piClient: piclient.zmq.sugar.socket.Socket):
                 # Display annotated image
                 image = cv2.flip(image, 1)
                 # cv2.imshow('MediaPipe Pose', cv2.flip(image, 1))
-                if image.flags['C_CONTIGUOUS']:
-                    # if image is already contiguous in memory just send it
-                    md = dict(dtype=str(image.dtype),shape=image.shape,)
-                    piClient.sendSocket.send_json(md)
-                    piClient.sendSocket.send(image, copy=False)
-                else:
-                    # else make it contiguous before sending
+                if not image.flags['C_CONTIGUOUS']:
                     image = np.ascontiguousarray(image)
-                    md = dict(dtype=str(image.dtype),shape=image.shape,)
-                    piClient.sendSocket.send_json(md)
-                    piClient.sendSocket.send(image, copy=False)
-                
+
+                send_array(piClient.sendSocket, image)
                 # piClient.sendSocket.send_image(image) #Send annotated image
                 val = cv2.waitKey(1)
                 # time.sleep(1)
     cam.release()
 
-def recvRoutine(piClient: piclient.zmq.sugar.socket.Socket):
+def recvRoutine(piClient: PiClient):
     while piClient.running:
         try:
-            md = piClient.recvSocket.recv_json()
-            image = piClient.recvSocket.recv(piclient.zmq.NOBLOCK)
-            image = np.frombuffer(image, dtype=md['dtype'])
-            image = image.reshape(md['shape'])
+            image = recv_array(piClient.recvSocket)
             cv2.imshow('MediaPipe Pose', image)
         except piclient.zmq.ZMQError as e:
             pass
 
 if __name__ == "__main__":
-    if len(piclient.sys.argv) != 5:
+    if len(sys.argv) != 5:
         print("Usage: serverAddr, serverPort, clientAddr, clientPort")
         exit()
     
     # Grab system args
-    serverAddr = piclient.sys.argv[1]
-    serverPort = int(piclient.sys.argv[2])
-    clientAddr = piclient.sys.argv[3]
-    clientPort = int(piclient.sys.argv[4])
+    serverAddr = sys.argv[1]
+    serverPort = int(sys.argv[2])
+    clientAddr = sys.argv[3]
+    clientPort = int(sys.argv[4])
 
     # Setup PiClient
-    pi = piclient.PiClient(serverAddr, serverPort, clientAddr, clientPort)
+    pi = PiClient(serverAddr, serverPort, clientAddr, clientPort)
     pi.setSendRoutine(sendRoutine)
     pi.setRecvRoutine(recvRoutine)
 

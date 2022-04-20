@@ -44,7 +44,7 @@ The user must dictate what the sending and receiving routines are by writing
 the functions themselves and calling the setSendRoutine() and setRecvRoutine()
 functions. The signature of the routine functions must exactly match this
 
-routine(piClient: zmq.sugar.socket.Socket) -> None:
+routine(piClient: zmq.sugar.socket.Socket): -> None
 
 If the signature doesn't match, the program will exit. Both routines must be
 set before start is called or the program will exit. Once the routines are set
@@ -64,13 +64,13 @@ class PiClient:
         assert isinstance(serverPort, int)
         assert isinstance(clientAddr, str)
         assert isinstance(clientPort, int)
-        
-        # Private fields
+
+        # Private fields        
         self.__context = zmq.Context()
         self.__sendRoutine = None
         self.__recvRoutine = None
 
-        # Public fields accessible by user routines
+        # Public fields
         self.running = False
         self.sendSocket = self.__makeSender(serverAddr, serverPort)
         self.recvSocket = self.__makeReceiver(clientAddr, clientPort)
@@ -91,12 +91,10 @@ class PiClient:
         self.__recvThread.start()
 
     def close(self):
-        # Close threads
         self.running = False
         self.__sendThread.join()
         self.__recvThread.join()
 
-        # Close resources
         self.sendSocket.close()
         self.recvSocket.close()
         self.__context.term()
@@ -106,9 +104,9 @@ class PiClient:
             sig = signature(userSendRoutine)
             assert(len(sig.parameters) == 1)
             paramType = sig.parameters['piClient'].annotation
-            assert(paramType == zmq.sugar.socket.Socket)
+            assert(paramType == PiClient)
         except:
-            print("Send routine doesn't have appropriate signature, exitting...")
+            print("Send routine doesn't have correct signature, exitting...")
             exit()
         self.__sendRoutine = userSendRoutine
     
@@ -117,9 +115,9 @@ class PiClient:
             sig = signature(userRecvRoutine)
             assert(len(sig.parameters) == 1)
             paramType = sig.parameters['piClient'].annotation
-            assert(paramType == zmq.sugar.socket.Socket)
+            assert(paramType == PiClient)
         except:
-            print("Recv routine doesn't have appropriate signature, exitting...")
+            print("Recv routine doesn't have correct signature, exitting...")
             exit()
         self.__recvRoutine = userRecvRoutine
 
@@ -129,14 +127,14 @@ class PiClient:
         connectString = "tcp://{}:{}".format(serverAddr, str(serverPort))
         pub = self.__context.socket(zmq.PUB)
         pub.bind(connectString)
-        pub.setsockopt(zmq.CONFLATE, 1)
+        #pub.setsockopt(zmq.CONFLATE, 1)
         time.sleep(1)
         return pub
 
     def __makeReceiver(self, clientAddr, clientPort):
         connectString = "tcp://{}:{}".format(clientAddr, str(clientPort))
         sub = self.__context.socket(zmq.SUB)
-        sub.setsockopt(zmq.CONFLATE, 1)
+        #sub.setsockopt(zmq.CONFLATE, 1)
         sub.connect(connectString)
         sub.subscribe("")
         time.sleep(1)
@@ -144,12 +142,12 @@ class PiClient:
 
 ######### Example Usage #######################################################
 
-def sendRoutine(piClient: zmq.sugar.socket.Socket):
+def sendRoutine(piClient: PiClient):
     while piClient.running:
         piClient.sendSocket.send_string("Hello World!")
         time.sleep(1)
 
-def recvRoutine(piClient: zmq.sugar.socket.Socket):
+def recvRoutine(piClient: PiClient):
     while piClient.running:
         try:
             msg = piClient.recvSocket.recv_string(zmq.NOBLOCK)
@@ -157,23 +155,24 @@ def recvRoutine(piClient: zmq.sugar.socket.Socket):
         except zmq.ZMQError as e:
             pass
 
-if __name__ == "__main__":
+def main():
     if len(sys.argv) != 5:
         print("Usage: serverAddr, serverPort, clientAddr, clientPort")
         exit()
     
-    # Grab system args
     serverAddr = sys.argv[1]
     serverPort = int(sys.argv[2])
     clientAddr = sys.argv[3]
     clientPort = int(sys.argv[4])
 
-    # Setup PiClient
     pi = PiClient(serverAddr, serverPort, clientAddr, clientPort)
     pi.setSendRoutine(sendRoutine)
     pi.setRecvRoutine(recvRoutine)
 
-    # Run PiClient
     pi.start()
     time.sleep(10)
     pi.close()
+
+
+if __name__ == "__main__":
+    main()
