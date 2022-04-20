@@ -5,6 +5,7 @@ import sys
 import os
 import io
 import json
+import time
 from typing import Optional, Tuple
 
 
@@ -38,6 +39,18 @@ class NmsOutputShapes:
             1, 1, max_allowed_boxes, num_classes)
         self.score_dtype = np.dtype(np.int16)
 
+class Ball:
+    ball = cv2.imread(r'ball.png', cv2.IMREAD_UNCHANGED)
+    ballImage = 0
+    ballAlpha = 0
+    ballDim = 0
+    # parameterized constructor
+    def __init__(self, scale_percent):
+        self.ballDim = ((int(self.ball.shape[1] * scale_percent / 100)), int(self.ball.shape[0] * scale_percent / 100))
+        self.ballImage = cv2.resize(self.ball, self.dim, interpolation = cv2.INTER_AREA)
+        self.ballAlpha = self.ballImage[..., 3] / 255.0
+        self.ballAlpha = np.repeat(self.ballAlpha[..., np.newaxis], 3, axis=2)
+        self.ballImage = self.ballImage[..., :3]
 class CameraStreamInput:
     """
     Initializes a camera stream and returns it as an iterable object
@@ -68,6 +81,52 @@ class CameraStreamInput:
         else:
             raise StopIteration
 
+def physicsCalc(init_pose, final_pose, deltaT):
+  # physics
+  print()
+
+  # Window frame dimensions (adjust for 2m by 2m)
+  width = 2 # m scale to human position (window width is 1920 pixels)
+  height = 1.125 # m window height is 1080 pixels
+  # turning nromalized values into window values
+  init_poseModx = init_pose.x*width
+  init_poseMody = (1-init_pose.y)*height
+  final_poseModx = final_pose.x*width
+  final_poseMody = (1-final_pose.y)*height
+
+  # Constants
+  m = 0.057 # kg mass of tennis ball
+  ag = 9.8 # m/s^2 acceleration due to gravity
+  Cd = 0.5 # coefficient of drag of a tennis ball
+  p = 1.21 # kg/m^3 density of air
+  A = 0.0034 # m^2 cross sectional area of tennis ball
+
+  # Initial velo values
+  vz0 = 13 # m/s 
+  deltaZ = 10 # m (rough estimate f distance between two players)
+  vx0 = (final_poseModx - init_poseModx)/deltaT # initial x velocity caused by hit impulse
+  vy0 = (final_poseMody - init_poseMody)/deltaT # initial y velocity caused by hit impulse
+
+  # Acceleration of Drag in each axis
+  adx = (0.5*Cd*p*A*(vx0**2))/m
+  ady = (0.5*Cd*p*A*(vy0**2))/m
+  adz = (0.5*Cd*p*A*(vz0**2))/m
+
+  # Solve for total air time based on deltaZ (Quadratic Formula)
+  d = (vz0**2) - (4*(0.5*adz)*(-deltaZ)) # calculate the discriminant
+  sol1 = (-vz0-math.sqrt(d))/(2*(0.5*adz)) # find two solutions
+  sol2 = (-vz0+math.sqrt(d))/(2*(0.5*adz))
+  totalAirTime = max(sol1, sol2) # Total air time will positive solution
+
+  # Solve for deltaX and deltaY
+  deltaX = (vx0*3)*totalAirTime + 0.5*(-adx/2)*(totalAirTime**2)
+  deltaY = (vy0*3)*totalAirTime + 0.5*(-ady/2-ag/10)*(totalAirTime**2)
+
+  # return a final normalized ball position
+  finalX = init_pose.x + deltaX/width
+  finalY = init_pose.y - deltaY/height
+
+  return finalX, finalY
 
 def draw_boxes(image, vboxes, vbox_count, vbox_ids, hscale=1, vscale=1):
     class_id = 0
@@ -87,14 +146,42 @@ def draw_boxes(image, vboxes, vbox_count, vbox_ids, hscale=1, vscale=1):
                     image = cv2.putText(
                         image, labels[class_id], txt_start, cv2.FONT_HERSHEY_SIMPLEX, 1.5, color, 2)
         class_id += 1
-    cv2.imshow("frame", image)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        exit
+    
+    return image
 
-    return
-
+def getRacketPose(vboxes, vbox_count, vbox_ids, hscale=1, vscale=1):
+    class_id = 0
+    x = 0
+    y = 0
+    for count in np.nditer(vbox_count):
+        if(count > 0 and count < 160):
+            for i in range(count):
+                box_id = vbox_ids[0, 0, i, class_id]
+                xmin, xmax, ymin, ymax  = (
+                    vboxes[0, 0, :, box_id] / (2**12))
+                if labels[class_id] ==  "tennis racket":
+                    x = (xmin+xmax)*hscale // 2
+                    y = (ymin+ymax)*vscale // 2
+        class_id += 1
+    
+    return x, y
 
 def tyolo_and_nms_run():
+    # # Initialize function global variables
+    # record_pose = False
+    # record_start = 0
+    # val = 0
+    # counting_down = False
+    # # Init Pose Bool
+    # init_pose_bool = False    
+    # init_pose = 0
+    # final_pose = 0
+    # finalX = 0
+    # finalY = 0
+
+    # # Grab ball images to super-impose on images
+    # ball10, ball5, ball2_5 = Ball(10), Ball(5), Ball(2_5)
+
     # Pre-process input data or get a camera stream ready
     input_camera_stream = CameraStreamInput()
 
@@ -148,6 +235,30 @@ def tyolo_and_nms_run():
     score_threshold = float_to_fp32(0.5, 12)
     
     for orig_frame, frame_id in input_camera_stream:
+        # ball = ball2_5.ballImage
+        # ball_alpha = ball2_5.ballAlpha
+        # dim = ball2_5.ballDim
+		# # SpaceBar is hit let's annotate pose on the image.
+        # if val == 32 and not record_pose:
+        #     counting_down = True # if sendOrRecieve is Recieve
+        #     counting_start = time.time()
+        # orig_frame.flags.writeable = True 
+        # if counting_down:
+        #     time_diff = round(time.time() - counting_start)
+        #     if time_diff == 0:
+        #         ball = ball10.ballImage
+        #         ball_alpha = ball10.ballAlpha
+        #         dim = ball10
+        #     elif time_diff == 1:
+        #         ball = ball5.ballImage
+        #         ball_alpha = ball5.ballAlpha
+        #         dim = ball5.ballDim
+
+        #     if time_diff >= 3:
+        #         record_pose = True
+        #         record_start = time.time()
+        #         counting_down = False
+
         # Prepare the frame
         resized_orig_frame = cv2.resize(orig_frame, (416, 416))
         resized_reshaped_frame = resized_orig_frame.reshape(input_image_shape)
@@ -169,7 +280,12 @@ def tyolo_and_nms_run():
         vboxes = device.copy_ndarray_from_device(
             vboxes_device_tensor, nms_outputs.vboxes_shape, nms_outputs.vboxes_dtype)
 
-        draw_boxes(orig_frame, vboxes, vbox_count, vbox_ids, hscale=orig_frame.shape[1] / 416, vscale=orig_frame.shape[0] / 416)
+        orig_frame = draw_boxes(orig_frame, vboxes, vbox_count, vbox_ids, hscale=orig_frame.shape[1] / 416, vscale=orig_frame.shape[0] / 416)
+        poseX, poseY = getRacketPose(vboxes, vbox_count, vbox_ids, hscale=orig_frame.shape[1] / 416, vscale=orig_frame.shape[0] / 416)
+
+        cv2.imshow("frame", orig_frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            exit
 
 if __name__ == "__main__":
     tyolo_and_nms_run()
