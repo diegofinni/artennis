@@ -1,0 +1,92 @@
+{
+    "entrypoint": "filter_boxes",
+    "kernel": "nms_epu.s",
+    "parameters": [
+        {
+            "dtype": "int32",
+            "format": "bin",
+            "parameter": [
+                "p0",
+                "p1"
+            ],
+            "shape": [
+                1,
+                1,
+                85,
+                2535
+            ],
+            "value": "nms_epu.s.tensor0.bin"
+        },
+        {
+            "dtype": "int32",
+            "expected_value": "nms_epu.s.expected_value_2.bin",
+            "format": "bin",
+            "parameter": [
+                "p2",
+                "p3"
+            ],
+            "shape": [
+                1,
+                1,
+                4,
+                160
+            ],
+            "value": "nms_epu.s.tensor2.bin"
+        },
+        {
+            "dtype": "uint16",
+            "format": "bin",
+            "parameter": [
+                "p4",
+                "p5"
+            ],
+            "shape": [
+                1,
+                1,
+                160,
+                80
+            ],
+            "value": "nms_epu.s.tensor4.bin"
+        },
+        {
+            "dtype": "uint32",
+            "format": "bin",
+            "parameter": [
+                "p6",
+                "p7"
+            ],
+            "shape": [
+                1,
+                1,
+                1,
+                80
+            ],
+            "value": "nms_epu.s.tensor6.bin"
+        },
+        {
+            "dtype": "uint16",
+            "format": "bin",
+            "parameter": [
+                "p8",
+                "p9"
+            ],
+            "shape": [
+                1,
+                1,
+                160,
+                80
+            ],
+            "value": "nms_epu.s.tensor8.bin"
+        },
+        {
+            "format": "scalar",
+            "parameter": "p10",
+            "value": 2048
+        },
+        {
+            "format": "scalar",
+            "parameter": "p11",
+            "value": 2048
+        }
+    ]
+}

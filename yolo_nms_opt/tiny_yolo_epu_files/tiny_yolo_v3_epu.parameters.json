@@ -1,0 +1,52 @@
+{
+    "entrypoint": "infer",
+    "kernel": "tiny_yolo_v3_epu.s",
+    "parameters": [
+        {
+            "dtype": "uint8",
+            "format": "bin",
+            "parameter": [
+                "p0",
+                "p1"
+            ],
+            "shape": [
+                1,
+                1,
+                1,
+                14696960
+            ],
+            "value": "tiny_yolo_v3_epu.s.tensor0.bin"
+        },
+        {
+            "dtype": "uint8",
+            "format": "bin",
+            "parameter": [
+                "p2",
+                "p3"
+            ],
+            "shape": [
+                1,
+                1,
+                416,
+                1248
+            ],
+            "value": "tiny_yolo_v3_epu.s.tensor2.bin"
+        },
+        {
+            "dtype": "int32",
+            "expected_value": "tiny_yolo_v3_epu.s.expected_value_4.bin",
+            "format": "bin",
+            "parameter": [
+                "p4",
+                "p5"
+            ],
+            "shape": [
+                1,
+                85,
+                1,
+                2535
+            ],
+            "value": "tiny_yolo_v3_epu.s.tensor4.bin"
+        }
+    ]
+}
