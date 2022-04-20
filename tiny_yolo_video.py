@@ -48,7 +48,6 @@ class CameraStreamInput:
         self.vid.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
         self.vid.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
         self.vid.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-        self.vid.set(cv2.CAP_PROP_FPS, 30)
         self._index = 0
 
     def __iter__(self):
@@ -78,7 +77,7 @@ def draw_boxes(image, vboxes, vbox_count, vbox_ids, hscale=1, vscale=1):
                 box_id = vbox_ids[0, 0, i, class_id]
                 xmin, xmax, ymin, ymax  = (
                     vboxes[0, 0, :, box_id] / (2**12))
-                if labels[class_id] !=  "tvmonitor":
+                if labels[class_id] ==  "tennis racket":
                     box_start = (int(xmin * hscale), int(ymin *vscale))
                     box_end = (int(xmax *hscale), int(ymax*vscale))
                     txt_start = (int(xmin *hscale), int(ymin *vscale)-5)
