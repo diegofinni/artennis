@@ -149,7 +149,7 @@ def draw_boxes(image, vboxes, vbox_count, vbox_ids, hscale=1, vscale=1):
     
     return image
 
-def getRacketPose(vboxes, vbox_count, vbox_ids, hscale=1, vscale=1):
+def getRacketPose(image, vboxes, vbox_count, vbox_ids, hscale=1, vscale=1):
     class_id = 0
     x = 0
     y = 0
@@ -160,8 +160,10 @@ def getRacketPose(vboxes, vbox_count, vbox_ids, hscale=1, vscale=1):
                 xmin, xmax, ymin, ymax  = (
                     vboxes[0, 0, :, box_id] / (2**12))
                 if labels[class_id] ==  "tennis racket":
-                    x = (xmin+xmax)*hscale // 2
-                    y = (ymin+ymax)*vscale // 2
+                    x = (xmin+xmax)*hscale / 2
+                    y = (ymin+ymax)*vscale / 2
+                    x /= image.shape[1]
+                    y /= image.shape[0]
         class_id += 1
     
     return x, y
@@ -280,8 +282,9 @@ def tyolo_and_nms_run():
         vboxes = device.copy_ndarray_from_device(
             vboxes_device_tensor, nms_outputs.vboxes_shape, nms_outputs.vboxes_dtype)
 
+        poseX, poseY = getRacketPose(orig_frame, vboxes, vbox_count, vbox_ids, hscale=orig_frame.shape[1] / 416, vscale=orig_frame.shape[0] / 416)
         orig_frame = draw_boxes(orig_frame, vboxes, vbox_count, vbox_ids, hscale=orig_frame.shape[1] / 416, vscale=orig_frame.shape[0] / 416)
-        poseX, poseY = getRacketPose(vboxes, vbox_count, vbox_ids, hscale=orig_frame.shape[1] / 416, vscale=orig_frame.shape[0] / 416)
+        print(f'PoseX: {poseX}, PoseY: {poseY}')
 
         cv2.imshow("frame", orig_frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
