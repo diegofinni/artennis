@@ -60,6 +60,7 @@ cap.set(4, 1080)
 record_pose = False
 record_start = 0
 val = 0
+counting_down = False
 
 # Init Pose Bool
 init_pose_bool = False    
@@ -70,16 +71,33 @@ finalY = 0
 
 # Initialize Image
 ball = cv2.imread(r'ball.png', cv2.IMREAD_UNCHANGED)
-scale_percent = 20 # percent of original size
+scale_percent = 10 # percent of original size
 width = int(ball.shape[1] * scale_percent / 100)
 height = int(ball.shape[0] * scale_percent / 100)
-dim = (width, height)
+dim20 = (width, height)
+scale_percent = 5 # percent of original size
+width = int(ball.shape[1] * scale_percent / 100)
+height = int(ball.shape[0] * scale_percent / 100)
+dim10 = (width, height)
+scale_percent = 2.5 # percent of original size
+width = int(ball.shape[1] * scale_percent / 100)
+height = int(ball.shape[0] * scale_percent / 100)
+dim5 = (width, height)
 # resize image
-ball = cv2.resize(ball, dim, interpolation = cv2.INTER_AREA)
+ball20 = cv2.resize(ball, dim20, interpolation = cv2.INTER_AREA)
+ball10 = cv2.resize(ball, dim10, interpolation = cv2.INTER_AREA)
+ball5 = cv2.resize(ball, dim5, interpolation = cv2.INTER_AREA)
+
 # Prepare pixel-wise alpha blending
-ball_alpha = ball[..., 3] / 255.0
-ball_alpha = np.repeat(ball_alpha[..., np.newaxis], 3, axis=2)
-ball = ball[..., :3]
+ball_alpha20 = ball20[..., 3] / 255.0
+ball_alpha20 = np.repeat(ball_alpha20[..., np.newaxis], 3, axis=2)
+ball20 = ball20[..., :3]
+ball_alpha10 = ball10[..., 3] / 255.0
+ball_alpha10 = np.repeat(ball_alpha10[..., np.newaxis], 3, axis=2)
+ball10 = ball10[..., :3]
+ball_alpha5 = ball5[..., 3] / 255.0
+ball_alpha5 = np.repeat(ball_alpha5[..., np.newaxis], 3, axis=2)
+ball5 = ball5[..., :3]
 
 with mp_pose.Pose(
     min_detection_confidence=0.5,
@@ -90,6 +108,9 @@ with mp_pose.Pose(
   # Main Loop
   while cap.isOpened():
     success, image = cap.read() #Read Camera Frame
+    ball = ball5
+    ball_alpha = ball_alpha5
+    dim = dim5
     if not success:
       print("Ignoring empty camera frame.")
       # If loading a video, use 'break' instead of 'continue'.
@@ -101,10 +122,24 @@ with mp_pose.Pose(
 
     # Draw the pose annotation on the image.
     if val == 32 and not record_pose:
-      record_pose = True
-      record_start = time.time()
+      counting_down = True # if sendOrRecieve is Recieve
+      counting_start = time.time()
     image.flags.writeable = True 
-  
+    if counting_down:
+      time_diff = round(time.time() - counting_start)
+      if time_diff == 0:
+        ball = ball20
+        ball_alpha = ball_alpha20
+        dim = dim20
+      elif time_diff == 1:
+        ball = ball10
+        ball_alpha = ball_alpha10
+        dim = dim10
+
+      if time_diff >= 3:
+        record_pose = True
+        record_start = time.time()
+        counting_down = False
 
     # We want to record the pose data
     if record_pose:
@@ -135,11 +170,17 @@ with mp_pose.Pose(
         # print(finalY)
 
     # Super impose ball on frame
-    ex = max(min(int(finalX*image.shape[1])-width//2, image.shape[1]-width), 0)
-    ey = max(min(int(finalY*image.shape[0])-height//2, image.shape[0]-height), 0)
-    if not init_pose_bool:
-      image[ey:ey+height, ex:ex+width, :] = image[ey:ey+height, ex:ex+width, :] * (1 - ball_alpha) + ball * ball_alpha
+    ex = max(min(int(finalX*image.shape[1])-dim[0]//2, image.shape[1]-dim[0]), 0)
+    ey = max(min(int(finalY*image.shape[0])-dim[1]//2, image.shape[0]-dim[1]), 0)
+    # Add Ball to image
+    imageBeforeBall = cv2.flip(cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation = cv2.INTER_AREA), 1)
+    image[ey:ey+dim[1], ex:ex+dim[0], :] = image[ey:ey+dim[1], ex:ex+dim[0], :] * (1 - ball_alpha) + ball * ball_alpha
+    image = cv2.flip(image,1)
+    if counting_down:
+      image = cv2.putText(image,str(3 - round(time.time() - counting_start)), (image.shape[1]//2-200, image.shape[0]//2+100), cv2.FONT_HERSHEY_SIMPLEX, 16, (255, 0, 0), 70, cv2.LINE_AA)
     # Display annotated image
-    cv2.imshow('MediaPipe Pose', cv2.flip(image, 1))
+    image = cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation = cv2.INTER_AREA)
+    image = np.concatenate((image, imageBeforeBall), axis=1)
+    cv2.imshow('MediaPipe Pose', image)
     val = cv2.waitKey(1)
 cap.release()
