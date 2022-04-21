@@ -160,14 +160,7 @@ with mp_pose.Pose(
         final_pose = results.pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_WRIST]
         record_pose = False
         init_pose_bool = False
-        # print("InitPose")
-        # print(init_pose.x)
-        # print(init_pose.y)
-        # Calculate ball
         finalX, finalY = physicsCalc(init_pose,final_pose, deltaT)
-        # print("FinalPose")
-        # print(finalX)
-        # print(finalY)
 
     # Super impose ball on frame
     ex = max(min(int(finalX*image.shape[1])-dim[0]//2, image.shape[1]-dim[0]), 0)

@@ -21,13 +21,11 @@ final_pose = 0
 finalX = 0
 finalY = 0
 
-def send_array(socket, A, flags=0, copy=True, track=False, sendOrRecieve, ballPosition):
+def send_array(socket, A, flags=0, copy=True, track=False):
     """send a numpy array with metadata"""
     md = dict(
         dtype = str(A.dtype),
         shape = A.shape,
-        sendOrRecieve = sendOrRecieve,
-        ballPosition = ballPosition,
     )
     socket.send_json(md, flags|zmq.SNDMORE)
     return socket.send(A, flags, copy=copy, track=track)
@@ -36,9 +34,8 @@ def recv_array(socket, flags=0, copy=True, track=False):
     """recv a numpy array"""
     md = socket.recv_json(flags=flags)
     msg = socket.recv(flags=flags, copy=copy, track=track)
-    buf = buffer(msg)
-    A = numpy.frombuffer(buf, dtype=md['dtype'])
-    return A.reshape(md['shape']), md.sendOrRecieve, md.ballPostion
+    A = np.frombuffer(msg, dtype=md['dtype'])
+    return A.reshape(md['shape'])
 
 def physicsCalc(init_pose, final_pose, deltaT):
   # physics
@@ -190,7 +187,7 @@ def recvRoutine(piClient: PiClient):
         try:
             image = recv_array(piClient.recvSocket)
             cv2.imshow('MediaPipe Pose', image)
-        except piclient.zmq.ZMQError as e:
+        except zmq.ZMQError as e:
             pass
 
 if __name__ == "__main__":

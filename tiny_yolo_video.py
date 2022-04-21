@@ -47,10 +47,11 @@ class Ball:
     # parameterized constructor
     def __init__(self, scale_percent):
         self.ballDim = ((int(self.ball.shape[1] * scale_percent / 100)), int(self.ball.shape[0] * scale_percent / 100))
-        self.ballImage = cv2.resize(self.ball, self.dim, interpolation = cv2.INTER_AREA)
+        self.ballImage = cv2.resize(self.ball, self.ballDim, interpolation = cv2.INTER_AREA)
         self.ballAlpha = self.ballImage[..., 3] / 255.0
         self.ballAlpha = np.repeat(self.ballAlpha[..., np.newaxis], 3, axis=2)
         self.ballImage = self.ballImage[..., :3]
+
 class CameraStreamInput:
     """
     Initializes a camera stream and returns it as an iterable object
@@ -166,23 +167,23 @@ def getRacketPose(image, vboxes, vbox_count, vbox_ids, hscale=1, vscale=1):
                     y /= image.shape[0]
         class_id += 1
     
-    return x, y
+    return (x, y)
 
 def tyolo_and_nms_run():
     # # Initialize function global variables
-    # record_pose = False
-    # record_start = 0
-    # val = 0
-    # counting_down = False
-    # # Init Pose Bool
-    # init_pose_bool = False    
-    # init_pose = 0
-    # final_pose = 0
-    # finalX = 0
-    # finalY = 0
+    record_pose = False
+    record_start = 0
+    val = 0
+    counting_down = False
+    # Init Pose Bool
+    init_pose_bool = False    
+    init_pose = 0
+    final_pose = 0
+    finalX = 0
+    finalY = 0
 
-    # # Grab ball images to super-impose on images
-    # ball10, ball5, ball2_5 = Ball(10), Ball(5), Ball(2_5)
+    # Grab ball images to super-impose on images
+    ball10, ball5, ball2_5 = Ball(10), Ball(5), Ball(2_5)
 
     # Pre-process input data or get a camera stream ready
     input_camera_stream = CameraStreamInput()
@@ -236,59 +237,82 @@ def tyolo_and_nms_run():
     nms_threshold = float_to_fp32(0.5, 12)
     score_threshold = float_to_fp32(0.5, 12)
     
-    for orig_frame, frame_id in input_camera_stream:
-        # ball = ball2_5.ballImage
-        # ball_alpha = ball2_5.ballAlpha
-        # dim = ball2_5.ballDim
-		# # SpaceBar is hit let's annotate pose on the image.
-        # if val == 32 and not record_pose:
-        #     counting_down = True # if sendOrRecieve is Recieve
-        #     counting_start = time.time()
-        # orig_frame.flags.writeable = True 
-        # if counting_down:
-        #     time_diff = round(time.time() - counting_start)
-        #     if time_diff == 0:
-        #         ball = ball10.ballImage
-        #         ball_alpha = ball10.ballAlpha
-        #         dim = ball10
-        #     elif time_diff == 1:
-        #         ball = ball5.ballImage
-        #         ball_alpha = ball5.ballAlpha
-        #         dim = ball5.ballDim
+    for image, frame_id in input_camera_stream:
+        ball = ball2_5.ballImage
+        ball_alpha = ball2_5.ballAlpha
+        dim = ball2_5.ballDim
+		# SpaceBar is hit let's annotate pose on the image.
+        if val == 32 and not record_pose:
+            counting_down = True # if sendOrRecieve is Recieve
+            counting_start = time.time()
+        image.flags.writeable = True 
+        if counting_down:
+            time_diff = round(time.time() - counting_start)
+            if time_diff == 0:
+                ball = ball10.ballImage
+                ball_alpha = ball10.ballAlpha
+                dim = ball10.ballDim
+            elif time_diff == 1:
+                ball = ball5.ballImage
+                ball_alpha = ball5.ballAlpha
+                dim = ball5.ballDim
 
-        #     if time_diff >= 3:
-        #         record_pose = True
-        #         record_start = time.time()
-        #         counting_down = False
+            if time_diff >= 3:
+                record_pose = True
+                record_start = time.time()
+                counting_down = False
 
-        # Prepare the frame
-        resized_orig_frame = cv2.resize(orig_frame, (416, 416))
-        resized_reshaped_frame = resized_orig_frame.reshape(input_image_shape)
-        # Copy image to device
-        device.copy_ndarray_to_device(
-            resized_reshaped_frame, input_device_tensor)
-        device.load_kernel(tyolo_kernel)
-        # Run YoloV3
-        device.run_kernel("infer", (weights_input_tensor,
-                          input_device_tensor, intermediate_device_tensor))
-        # Run NMS
-        device.load_kernel(nms_kernel)
-        device.run_kernel("filter_boxes", (intermediate_device_tensor,
-                                           vboxes_device_tensor, score_tensor, vbox_count_device_tensor, vbox_ids_device_tensor, score_threshold, nms_threshold))
-        vbox_count = device.copy_ndarray_from_device(
-            vbox_count_device_tensor, nms_outputs.vbox_count_shape, nms_outputs.vbox_count_dtype)
-        vbox_ids = device.copy_ndarray_from_device(
-            vbox_ids_device_tensor, nms_outputs.vbox_ids_shape, nms_outputs.vbox_ids_dtype)
-        vboxes = device.copy_ndarray_from_device(
-            vboxes_device_tensor, nms_outputs.vboxes_shape, nms_outputs.vboxes_dtype)
+        if record_pose:
+            # Prepare the frame
+            resized_orig_frame = cv2.resize(image, (416, 416))
+            resized_reshaped_frame = resized_orig_frame.reshape(input_image_shape)
+            # Copy image to device
+            device.copy_ndarray_to_device(
+                resized_reshaped_frame, input_device_tensor)
+            device.load_kernel(tyolo_kernel)
+            # Run YoloV3
+            device.run_kernel("infer", (weights_input_tensor,
+                            input_device_tensor, intermediate_device_tensor))
+            # Run NMS
+            device.load_kernel(nms_kernel)
+            device.run_kernel("filter_boxes", (intermediate_device_tensor,
+                                            vboxes_device_tensor, score_tensor, vbox_count_device_tensor, vbox_ids_device_tensor, score_threshold, nms_threshold))
+            vbox_count = device.copy_ndarray_from_device(
+                vbox_count_device_tensor, nms_outputs.vbox_count_shape, nms_outputs.vbox_count_dtype)
+            vbox_ids = device.copy_ndarray_from_device(
+                vbox_ids_device_tensor, nms_outputs.vbox_ids_shape, nms_outputs.vbox_ids_dtype)
+            vboxes = device.copy_ndarray_from_device(
+                vboxes_device_tensor, nms_outputs.vboxes_shape, nms_outputs.vboxes_dtype)
+            image = draw_boxes(image, vboxes, vbox_count, vbox_ids, hscale=image.shape[1] / 416, vscale=image.shape[0] / 416)
 
-        poseX, poseY = getRacketPose(orig_frame, vboxes, vbox_count, vbox_ids, hscale=orig_frame.shape[1] / 416, vscale=orig_frame.shape[0] / 416)
-        orig_frame = draw_boxes(orig_frame, vboxes, vbox_count, vbox_ids, hscale=orig_frame.shape[1] / 416, vscale=orig_frame.shape[0] / 416)
-        print(f'PoseX: {poseX}, PoseY: {poseY}')
+            if not init_pose_bool:
+                init_pose = getRacketPose(image, vboxes, vbox_count, vbox_ids, hscale=image.shape[1] / 416, vscale=image.shape[0] / 416)
+                init_pose_bool = True 
+            deltaT = time.time() - record_start
+            if deltaT > 2:
+                final_pose = getRacketPose(image, vboxes, vbox_count, vbox_ids, hscale=image.shape[1] / 416, vscale=image.shape[0] / 416)
+                record_pose = False
+                init_pose_bool = False
+                finalX, finalY = physicsCalc(init_pose,final_pose, deltaT)
 
-        cv2.imshow("frame", orig_frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            exit
+        # Super impose ball on frame
+        ex = max(min(int(finalX*image.shape[1])-dim[0]//2, image.shape[1]-dim[0]), 0)
+        ey = max(min(int(finalY*image.shape[0])-dim[1]//2, image.shape[0]-dim[1]), 0)
+        # Add Ball to image
+        # imageBeforeBall = cv2.flip(cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation = cv2.INTER_AREA), 1)
+        image[ey:ey+dim[1], ex:ex+dim[0], :] = image[ey:ey+dim[1], ex:ex+dim[0], :] * (1 - ball_alpha) + ball * ball_alpha
+        # image = cv2.flip(image,1)
+        if counting_down:
+            image = cv2.putText(image,str(3 - round(time.time() - counting_start)), (image.shape[1]//2-200, image.shape[0]//2+100), cv2.FONT_HERSHEY_SIMPLEX, 16, (255, 0, 0), 70, cv2.LINE_AA)
+        # Display annotated image
+        #image = cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation = cv2.INTER_AREA)
+        # image = np.concatenate((image, imageBeforeBall), axis=1)
+        # print(f'PoseX: {poseX}, PoseY: {poseY}')
+
+        cv2.imshow("frame", image)
+        # if cv2.waitKey(1) & 0xFF == ord('q'):
+          #  exit
+        val = cv2.waitKey(1)
 
 if __name__ == "__main__":
     tyolo_and_nms_run()
