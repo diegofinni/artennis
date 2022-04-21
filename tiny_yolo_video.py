@@ -6,7 +6,8 @@ import os
 import io
 import json
 import time
-from typing import Optional, Tuple
+import math
+from typing import Optional, Tuple, NamedTuple
 
 
 labels = ["person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck",
@@ -82,6 +83,10 @@ class CameraStreamInput:
         else:
             raise StopIteration
 
+class ANamedTuple(NamedTuple):
+    x: int
+    y: int
+
 def physicsCalc(init_pose, final_pose, deltaT):
   # physics
   print()
@@ -144,8 +149,6 @@ def draw_boxes(image, vboxes, vbox_count, vbox_ids, hscale=1, vscale=1):
                     color = COLORS[class_id]
                     cv2.rectangle(image, box_start,
                               box_end, color, 5)
-                    image = cv2.putText(
-                        image, labels[class_id], txt_start, cv2.FONT_HERSHEY_SIMPLEX, 1.5, color, 2)
         class_id += 1
     
     return image
@@ -167,7 +170,7 @@ def getRacketPose(image, vboxes, vbox_count, vbox_ids, hscale=1, vscale=1):
                     y /= image.shape[0]
         class_id += 1
     
-    return (x, y)
+    return ANamedTuple(x, y)
 
 def tyolo_and_nms_run():
     # # Initialize function global variables
@@ -301,7 +304,7 @@ def tyolo_and_nms_run():
         # Add Ball to image
         # imageBeforeBall = cv2.flip(cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation = cv2.INTER_AREA), 1)
         image[ey:ey+dim[1], ex:ex+dim[0], :] = image[ey:ey+dim[1], ex:ex+dim[0], :] * (1 - ball_alpha) + ball * ball_alpha
-        # image = cv2.flip(image,1)
+        image = cv2.flip(image,1)
         if counting_down:
             image = cv2.putText(image,str(3 - round(time.time() - counting_start)), (image.shape[1]//2-200, image.shape[0]//2+100), cv2.FONT_HERSHEY_SIMPLEX, 16, (255, 0, 0), 70, cv2.LINE_AA)
         # Display annotated image
