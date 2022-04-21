@@ -251,7 +251,7 @@ def tyolo_and_nms_run():
             if time_diff == 0:
                 ball = ball10.ballImage
                 ball_alpha = ball10.ballAlpha
-                dim = ball10
+                dim = ball10.ballDim
             elif time_diff == 1:
                 ball = ball5.ballImage
                 ball_alpha = ball5.ballAlpha
@@ -299,19 +299,20 @@ def tyolo_and_nms_run():
         ex = max(min(int(finalX*image.shape[1])-dim[0]//2, image.shape[1]-dim[0]), 0)
         ey = max(min(int(finalY*image.shape[0])-dim[1]//2, image.shape[0]-dim[1]), 0)
         # Add Ball to image
-        imageBeforeBall = cv2.flip(cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation = cv2.INTER_AREA), 1)
+        # imageBeforeBall = cv2.flip(cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation = cv2.INTER_AREA), 1)
         image[ey:ey+dim[1], ex:ex+dim[0], :] = image[ey:ey+dim[1], ex:ex+dim[0], :] * (1 - ball_alpha) + ball * ball_alpha
         # image = cv2.flip(image,1)
         if counting_down:
             image = cv2.putText(image,str(3 - round(time.time() - counting_start)), (image.shape[1]//2-200, image.shape[0]//2+100), cv2.FONT_HERSHEY_SIMPLEX, 16, (255, 0, 0), 70, cv2.LINE_AA)
         # Display annotated image
-        image = cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation = cv2.INTER_AREA)
-        image = np.concatenate((image, imageBeforeBall), axis=1)
+        #image = cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation = cv2.INTER_AREA)
+        # image = np.concatenate((image, imageBeforeBall), axis=1)
         # print(f'PoseX: {poseX}, PoseY: {poseY}')
 
         cv2.imshow("frame", image)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            exit
+        # if cv2.waitKey(1) & 0xFF == ord('q'):
+          #  exit
+        val = cv2.waitKey(1)
 
 if __name__ == "__main__":
     tyolo_and_nms_run()

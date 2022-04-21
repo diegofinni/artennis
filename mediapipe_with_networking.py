@@ -34,9 +34,8 @@ def recv_array(socket, flags=0, copy=True, track=False):
     """recv a numpy array"""
     md = socket.recv_json(flags=flags)
     msg = socket.recv(flags=flags, copy=copy, track=track)
-    buf = buffer(msg)
-    A = numpy.frombuffer(buf, dtype=md['dtype'])
-    return A.reshape(md['shape']), md.sendOrRecieve, md.ballPostion
+    A = np.frombuffer(msg, dtype=md['dtype'])
+    return A.reshape(md['shape'])
 
 def physicsCalc(init_pose, final_pose, deltaT):
   # physics
@@ -188,7 +187,7 @@ def recvRoutine(piClient: PiClient):
         try:
             image = recv_array(piClient.recvSocket)
             cv2.imshow('MediaPipe Pose', image)
-        except piClient.zmq.ZMQError as e:
+        except zmq.ZMQError as e:
             pass
 
 if __name__ == "__main__":
