@@ -92,12 +92,12 @@ class PiClient:
 
     def close(self):
         self.running = False
-        self.__sendThread.join()
-        self.__recvThread.join()
-
         self.sendSocket.close()
         self.recvSocket.close()
         self.__context.term()
+        self.__sendThread.join()
+        self.__recvThread.join()
+
 
     def setSendRoutine(self, userSendRoutine):
         try:
@@ -144,14 +144,15 @@ class PiClient:
 
 def sendRoutine(piClient: PiClient):
     while piClient.running:
-        piClient.sendSocket.send_string("Hello World!")
+        piClient.sendSocket.send(b"Hello World!")
         time.sleep(1)
 
 def recvRoutine(piClient: PiClient):
     while piClient.running:
         try:
-            msg = piClient.recvSocket.recv_string(zmq.NOBLOCK)
-            print("Received msg: ", msg)
+            msg = piClient.recvSocket.recv()
+            print(msg)
+            print(type(msg))
         except zmq.ZMQError as e:
             pass
 
