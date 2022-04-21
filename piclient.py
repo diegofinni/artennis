@@ -24,19 +24,17 @@ are made when start() is called, and closed when close() is called.
 
 Socket types:
 
-The sockets being used are PUB SUB zmq sockets. These sockets allow the PiClient
-to use the zmq.CONFLATE option for its sockets. This option sets the receive
-buffer to have a packet size of 1. This means that if the sender sends more than
-one packet before the receiver reads anything, then all but the last packet are
-dropped. This should help substantially with lag.
+The sockets being used are RADIO DISH zmq sockets. These sockets allow the
+PiClient to use the zmq.CONFLATE option for its sockets. This option sets the
+receive buffer to have a packet size of 1. This means that if the sender sends
+more than one packet before the receiver reads anything, then all but the last
+packet are dropped. This should help substantially with lag.
 
 Network protocols:
 
-PiClient uses the TCP protocol instead of UDP. zmq has no official support for
-UDP and I have been unable to successfully use draft sockets such as the RADIO
-DISH sockets that use UDP. While not allowing for packet loss will hurt
-performance, I believe that having the CONFLATE option is more important
-for battling lag
+PiClient uses the UDP protocol which the RADIO DISH socket types are made to
+officially support. UDP was selected so that lost packets were ignored and
+not retransmitted like they would be in TCP
 
 Routine setting:
 
@@ -125,26 +123,26 @@ class PiClient:
 
     def __makeSender(self, serverAddr, serverPort):
         connectString = "tcp://{}:{}".format(serverAddr, str(serverPort))
-        pub = self.__context.socket(zmq.PUB)
-        pub.bind(connectString)
-        #pub.setsockopt(zmq.CONFLATE, 1)
+        radio = self.__context.socket(zmq.RADIO)
+        radio.bind(connectString)
+        radio.setsockopt(zmq.CONFLATE, 1)
         time.sleep(1)
-        return pub
+        return radio
 
     def __makeReceiver(self, clientAddr, clientPort):
         connectString = "tcp://{}:{}".format(clientAddr, str(clientPort))
-        sub = self.__context.socket(zmq.SUB)
-        #sub.setsockopt(zmq.CONFLATE, 1)
-        sub.connect(connectString)
-        sub.subscribe("")
+        dish = self.__context.socket(zmq.DISH)
+        dish.setsockopt(zmq.CONFLATE, 1)
+        dish.connect(connectString)
+        dish.join("images")
         time.sleep(1)
-        return sub
+        return dish
 
 ######### Example Usage #######################################################
 
 def sendRoutine(piClient: PiClient):
     while piClient.running:
-        piClient.sendSocket.send(b"Hello World!")
+        piClient.sendSocket.send(b"Hello World!", group="images")
         time.sleep(1)
 
 def recvRoutine(piClient: PiClient):
@@ -154,6 +152,7 @@ def recvRoutine(piClient: PiClient):
             print(msg)
             print(type(msg))
         except zmq.ZMQError as e:
+            print("Error")
             pass
 
 def main():
