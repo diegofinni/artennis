@@ -47,10 +47,11 @@ class Ball:
     # parameterized constructor
     def __init__(self, scale_percent):
         self.ballDim = ((int(self.ball.shape[1] * scale_percent / 100)), int(self.ball.shape[0] * scale_percent / 100))
-        self.ballImage = cv2.resize(self.ball, self.dim, interpolation = cv2.INTER_AREA)
+        self.ballImage = cv2.resize(self.ball, self.ballDim, interpolation = cv2.INTER_AREA)
         self.ballAlpha = self.ballImage[..., 3] / 255.0
         self.ballAlpha = np.repeat(self.ballAlpha[..., np.newaxis], 3, axis=2)
         self.ballImage = self.ballImage[..., :3]
+
 class CameraStreamInput:
     """
     Initializes a camera stream and returns it as an iterable object
