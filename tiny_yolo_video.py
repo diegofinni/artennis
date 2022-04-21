@@ -283,13 +283,14 @@ def tyolo_and_nms_run():
                 vbox_ids_device_tensor, nms_outputs.vbox_ids_shape, nms_outputs.vbox_ids_dtype)
             vboxes = device.copy_ndarray_from_device(
                 vboxes_device_tensor, nms_outputs.vboxes_shape, nms_outputs.vboxes_dtype)
+            image = draw_boxes(image, vboxes, vbox_count, vbox_ids, hscale=image.shape[1] / 416, vscale=image.shape[0] / 416)
 
             if not init_pose_bool:
-                init_pose = getRacketPose(image, vboxes, vbox_count, vbox_ids, hscale=orig_frame.shape[1] / 416, vscale=orig_frame.shape[0] / 416)
+                init_pose = getRacketPose(image, vboxes, vbox_count, vbox_ids, hscale=image.shape[1] / 416, vscale=image.shape[0] / 416)
                 init_pose_bool = True 
             deltaT = time.time() - record_start
             if deltaT > 2:
-                final_pose = getRacketPose(image, vboxes, vbox_count, vbox_ids, hscale=orig_frame.shape[1] / 416, vscale=orig_frame.shape[0] / 416)
+                final_pose = getRacketPose(image, vboxes, vbox_count, vbox_ids, hscale=image.shape[1] / 416, vscale=image.shape[0] / 416)
                 record_pose = False
                 init_pose_bool = False
                 finalX, finalY = physicsCalc(init_pose,final_pose, deltaT)
@@ -306,7 +307,6 @@ def tyolo_and_nms_run():
         # Display annotated image
         image = cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation = cv2.INTER_AREA)
         image = np.concatenate((image, imageBeforeBall), axis=1)
-        image = draw_boxes(image, vboxes, vbox_count, vbox_ids, hscale=orig_frame.shape[1] / 416, vscale=orig_frame.shape[0] / 416)
         # print(f'PoseX: {poseX}, PoseY: {poseY}')
 
         cv2.imshow("frame", image)
