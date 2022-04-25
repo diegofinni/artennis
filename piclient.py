@@ -13,8 +13,8 @@ from inspect import signature
 Constructor args:
 
 The PiClient is meant to work in tandem with one other PiClient that is using a
-different (addr, port) tuple. This means that the server and client tuple for
-each PiClient must be the inverse of the PiClient that it is working with
+different (addr, port) tuple. This means that the two tuples of addr and port
+for each PiClient must be the inverse of the PiClient that it is working with
 
 Runtime operation:
 
@@ -57,11 +57,11 @@ running. This is set to false when close() is called
 
 class PiClient:
 
-    def __init__(self, serverAddr, serverPort, clientAddr, clientPort):
-        assert isinstance(serverAddr, str)
-        assert isinstance(serverPort, int)
-        assert isinstance(clientAddr, str)
-        assert isinstance(clientPort, int)
+    def __init__(self, myAddr, myPort, otherAddr, otherPort):
+        assert isinstance(myAddr, str)
+        assert isinstance(myPort, int)
+        assert isinstance(otherAddr, str)
+        assert isinstance(otherPort, int)
 
         # Private fields        
         self.__context = zmq.Context()
@@ -70,8 +70,8 @@ class PiClient:
 
         # Public fields
         self.running = False
-        self.sendSocket = self.__makeSender(serverAddr, serverPort)
-        self.recvSocket = self.__makeReceiver(clientAddr, clientPort)
+        self.sendSocket = self.__makeSender(otherAddr, otherPort)
+        self.recvSocket = self.__makeReceiver(myAddr, myPort)
 
 ######### Public Methods ######################################################
 
@@ -112,16 +112,16 @@ class PiClient:
 
 ######### Private Methods #####################################################
 
-    def __makeSender(self, serverAddr, serverPort):
-        connectString = "udp://{}:{}".format(serverAddr, str(serverPort))
+    def __makeSender(self, otherAddr, otherPort):
+        connectString = "udp://{}:{}".format(otherAddr, str(otherPort))
         radio = self.__context.socket(zmq.RADIO)
         radio.setsockopt(zmq.CONFLATE, 1)
         radio.connect(connectString)
         time.sleep(1)
         return radio
 
-    def __makeReceiver(self, clientAddr, clientPort):
-        connectString = "udp://{}:{}".format(clientAddr, str(clientPort))
+    def __makeReceiver(self, myAddr, myPort):
+        connectString = "udp://{}:{}".format(myAddr, str(myPort))
         dish = self.__context.socket(zmq.DISH)
         dish.setsockopt(zmq.CONFLATE, 1)
         dish.bind(connectString)
@@ -154,19 +154,20 @@ def recvRoutine(piClient: PiClient):
             print(msg)
             print(type(msg))
         except zmq.ZMQError as e:
+            print("error in receiving")
             pass
 
 def main():
     if len(sys.argv) != 5:
-        print("Usage: serverAddr, serverPort, clientAddr, clientPort")
+        print("Usage: myAddr, myPort, otherAddr, otherPort")
         exit()
     
-    serverAddr = sys.argv[1]
-    serverPort = int(sys.argv[2])
-    clientAddr = sys.argv[3]
-    clientPort = int(sys.argv[4])
+    myAddr = sys.argv[1]
+    myPort = int(sys.argv[2])
+    otherAddr = sys.argv[3]
+    otherPort = int(sys.argv[4])
 
-    pi = PiClient(serverAddr, serverPort, clientAddr, clientPort)
+    pi = PiClient(myAddr, myPort, otherAddr, otherPort)
     pi.setSendRoutine(sendRoutine)
     pi.setRecvRoutine(recvRoutine)
 

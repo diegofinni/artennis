@@ -104,8 +104,7 @@ def sendRoutine(piClient: PiClient):
             smooth_landmarks=True) as pose:
 
             while cam.isOpened():
-                if val == ord('q'):
-                    return
+                print("BEGINNING")
                 success, image = cam.read() # Read Camera Frame
                 if not success:
                     print("Ignoring empty camera frame.")
@@ -161,9 +160,10 @@ def sendRoutine(piClient: PiClient):
                 # cv2.imshow('MediaPipe Pose', cv2.flip(image, 1))
                 if not image.flags['C_CONTIGUOUS']:
                     image = np.ascontiguousarray(image)
-
+                
                 piClient.sendSocket.send(b'Hello World!', group='images')
                 val = cv2.waitKey(1)
+                print("END")
                 # time.sleep(1)
     cam.release()
 
