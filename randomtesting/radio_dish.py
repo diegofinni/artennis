@@ -12,7 +12,6 @@ dish.rcvtimeo = 1000
 dish.bind('udp://*:5556')
 dish.join('numbers')
 radio.connect('udp://127.0.0.1:5556')
-
 for i in range(10):
     time.sleep(0.1)
     radio.send(f'{i:03}'.encode('ascii'), group='numbers')

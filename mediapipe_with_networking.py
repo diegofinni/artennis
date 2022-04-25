@@ -23,19 +23,13 @@ finalY = 0
 
 def send_array(socket, A, flags=0, copy=True, track=False):
     """send a numpy array with metadata"""
-    md = dict(
-        dtype = str(A.dtype),
-        shape = A.shape,
-    )
-    socket.send_json(md, flags|zmq.SNDMORE)
     return socket.send(A, flags, copy=copy, track=track)
 
 def recv_array(socket, flags=0, copy=True, track=False):
     """recv a numpy array"""
-    md = socket.recv_json(flags=flags)
     msg = socket.recv(flags=flags, copy=copy, track=track)
-    A = np.frombuffer(msg, dtype=md['dtype'])
-    return A.reshape(md['shape'])
+    A = np.frombuffer(msg, dtype='uint8')
+    return A.reshape((720, 1280, 3))
 
 def physicsCalc(init_pose, final_pose, deltaT):
   # physics
@@ -86,8 +80,8 @@ def physicsCalc(init_pose, final_pose, deltaT):
 def sendRoutine(piClient: PiClient):
     # Initialize Camera
     cam = cv2.VideoCapture(0)
-    cam.set(3, 1920)
-    cam.set(4, 1080)
+    cam.set(3, 1280)
+    cam.set(4, 720)
 
     # Initialize Image
     ball = cv2.imread(r'ball.png', cv2.IMREAD_UNCHANGED)

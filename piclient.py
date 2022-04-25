@@ -122,18 +122,18 @@ class PiClient:
 ######### Private Methods #####################################################
 
     def __makeSender(self, serverAddr, serverPort):
-        connectString = "tcp://{}:{}".format(serverAddr, str(serverPort))
+        connectString = "udp://{}:{}".format(serverAddr, str(serverPort))
         radio = self.__context.socket(zmq.RADIO)
-        radio.bind(connectString)
         radio.setsockopt(zmq.CONFLATE, 1)
+        radio.connect(connectString)
         time.sleep(1)
         return radio
 
     def __makeReceiver(self, clientAddr, clientPort):
-        connectString = "tcp://{}:{}".format(clientAddr, str(clientPort))
+        connectString = "udp://{}:{}".format(clientAddr, str(clientPort))
         dish = self.__context.socket(zmq.DISH)
         dish.setsockopt(zmq.CONFLATE, 1)
-        dish.connect(connectString)
+        dish.bind(connectString)
         dish.join("images")
         time.sleep(1)
         return dish
