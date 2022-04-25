@@ -20,7 +20,7 @@ Runtime operation:
 
 The PiClient simultaneously sends and receives messages to the other PiClient by
 utilizing two different threads, one receiving, and one sending. These threads
-are made when start() is called, and closed when close() is called.
+are made when run() is called, and closed when close() is called.
 
 Socket types:
 
@@ -45,8 +45,8 @@ functions. The signature of the routine functions must exactly match this
 routine(piClient: zmq.sugar.socket.Socket): -> None
 
 If the signature doesn't match, the program will exit. Both routines must be
-set before start is called or the program will exit. Once the routines are set
-and start is called, you must simply call close before exitting. Look at the
+set before run is called or the program will exit. Once the routines are set
+and run is called, you must simply call close before exitting. Look at the
 "Example Usage" section to see what an example send and recv routine looks like
 
 The only fields accessible by user routines are the send and recv socket and
@@ -75,27 +75,18 @@ class PiClient:
 
 ######### Public Methods ######################################################
 
-    def start(self):
+    def run(self):
         if self.__sendRoutine == None or self.__recvRoutine == None:
             print("Cannot start PiClient until user routines are set")
             exit()
         
         self.running = True
-        self.__sendThread = threading.Thread(target=self.__sendRoutine,
-                                           args=(self,))
         self.__recvThread = threading.Thread(target=self.__recvRoutine,
                                            args=(self,))
-        self.__sendThread.start()
         self.__recvThread.start()
-
-    def close(self):
-        self.running = False
-        self.sendSocket.close()
-        self.recvSocket.close()
-        self.__context.term()
-        self.__sendThread.join()
-        self.__recvThread.join()
-
+        self.__sendRoutine(self)
+        
+        self.__close()
 
     def setSendRoutine(self, userSendRoutine):
         try:
@@ -138,12 +129,23 @@ class PiClient:
         time.sleep(1)
         return dish
 
+    def __close(self):
+        print(1)
+        self.running = False
+        print(1)
+        self.__context.destroy()
+        print(1)
+        self.__recvThread.join()
+        print(1)
+
 ######### Example Usage #######################################################
 
 def sendRoutine(piClient: PiClient):
-    while piClient.running:
+    counter = 0
+    while counter < 10:
         piClient.sendSocket.send(b"Hello World!", group="images")
         time.sleep(1)
+        counter += 1
 
 def recvRoutine(piClient: PiClient):
     while piClient.running:
@@ -152,7 +154,6 @@ def recvRoutine(piClient: PiClient):
             print(msg)
             print(type(msg))
         except zmq.ZMQError as e:
-            print("Error")
             pass
 
 def main():
@@ -169,10 +170,7 @@ def main():
     pi.setSendRoutine(sendRoutine)
     pi.setRecvRoutine(recvRoutine)
 
-    pi.start()
-    time.sleep(10)
-    pi.close()
-
+    pi.run()
 
 if __name__ == "__main__":
     main()

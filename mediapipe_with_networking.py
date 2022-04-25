@@ -21,16 +21,6 @@ final_pose = 0
 finalX = 0
 finalY = 0
 
-def send_array(socket, A, flags=0, copy=True, track=False):
-    """send a numpy array with metadata"""
-    return socket.send(A, flags, copy=copy, track=track)
-
-def recv_array(socket, flags=0, copy=True, track=False):
-    """recv a numpy array"""
-    msg = socket.recv(flags=flags, copy=copy, track=track)
-    A = np.frombuffer(msg, dtype='uint8')
-    return A.reshape((720, 1280, 3))
-
 def physicsCalc(init_pose, final_pose, deltaT):
   # physics
 
@@ -106,7 +96,7 @@ def sendRoutine(piClient: PiClient):
     global finalY    
 
     # Main Loop (generates frames)
-    while piClient.running:
+    while True:
         with mp_pose.Pose(
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5,
@@ -114,6 +104,8 @@ def sendRoutine(piClient: PiClient):
             smooth_landmarks=True) as pose:
 
             while cam.isOpened():
+                if val == ord('q'):
+                    return
                 success, image = cam.read() # Read Camera Frame
                 if not success:
                     print("Ignoring empty camera frame.")
@@ -170,8 +162,7 @@ def sendRoutine(piClient: PiClient):
                 if not image.flags['C_CONTIGUOUS']:
                     image = np.ascontiguousarray(image)
 
-                send_array(piClient.sendSocket, image)
-                # piClient.sendSocket.send_image(image) #Send annotated image
+                piClient.sendSocket.send(b'Hello World!', group='images')
                 val = cv2.waitKey(1)
                 # time.sleep(1)
     cam.release()
@@ -179,8 +170,14 @@ def sendRoutine(piClient: PiClient):
 def recvRoutine(piClient: PiClient):
     while piClient.running:
         try:
-            image = recv_array(piClient.recvSocket)
+            msg = piClient.recvSocket.recv()
+            print(msg)
+            """
+            image = np.frombuffer(msg, dtype='uint8')
+            image.reshape((720, 1280, 3))
+
             cv2.imshow('MediaPipe Pose', image)
+            """
         except zmq.ZMQError as e:
             pass
 
@@ -201,6 +198,4 @@ if __name__ == "__main__":
     pi.setRecvRoutine(recvRoutine)
 
     # Run PiClient
-    pi.start()
-    time.sleep(10)
-    pi.close()
+    pi.run()
