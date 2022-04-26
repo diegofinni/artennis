@@ -6,6 +6,7 @@ mp_pose = mp.solutions.pose
 import time
 import math
 import numpy as np
+from typing import Optional, Tuple, NamedTuple
 
 def physicsCalc(init_pose, final_pose, deltaT):
   # physics
@@ -54,126 +55,150 @@ def physicsCalc(init_pose, final_pose, deltaT):
 
   return finalX, finalY
 
-cap = cv2.VideoCapture(0)
-cap.set(3, 1920)
-cap.set(4, 1080)
-record_pose = False
-record_start = 0
-val = 0
-counting_down = False
+# class CameraStreamInput:
+#     """
+#     Initializes a camera stream and returns it as an iterable object
+#     """
 
-# Init Pose Bool
-init_pose_bool = False    
-init_pose = 0
-final_pose = 0
-finalX = 0
-finalY = 0
+#     def __init__(self):
+#         self.vid = cv2.VideoCapture(0, cv2.CAP_V4L2)
+#         self.vid.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+#         self.vid.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+#         self.vid.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+#         self._index = 0
 
-# Initialize Image
-ball = cv2.imread(r'ball.png', cv2.IMREAD_UNCHANGED)
-scale_percent = 10 # percent of original size
-width = int(ball.shape[1] * scale_percent / 100)
-height = int(ball.shape[0] * scale_percent / 100)
-dim20 = (width, height)
-scale_percent = 5 # percent of original size
-width = int(ball.shape[1] * scale_percent / 100)
-height = int(ball.shape[0] * scale_percent / 100)
-dim10 = (width, height)
-scale_percent = 2.5 # percent of original size
-width = int(ball.shape[1] * scale_percent / 100)
-height = int(ball.shape[0] * scale_percent / 100)
-dim5 = (width, height)
-# resize image
-ball20 = cv2.resize(ball, dim20, interpolation = cv2.INTER_AREA)
-ball10 = cv2.resize(ball, dim10, interpolation = cv2.INTER_AREA)
-ball5 = cv2.resize(ball, dim5, interpolation = cv2.INTER_AREA)
+#     def __iter__(self):
+#         """
+#         Creates an iterator for this container.
+#         """
+#         self._index = 0
+#         return self
 
-# Prepare pixel-wise alpha blending
-ball_alpha20 = ball20[..., 3] / 255.0
-ball_alpha20 = np.repeat(ball_alpha20[..., np.newaxis], 3, axis=2)
-ball20 = ball20[..., :3]
-ball_alpha10 = ball10[..., 3] / 255.0
-ball_alpha10 = np.repeat(ball_alpha10[..., np.newaxis], 3, axis=2)
-ball10 = ball10[..., :3]
-ball_alpha5 = ball5[..., 3] / 255.0
-ball_alpha5 = np.repeat(ball_alpha5[..., np.newaxis], 3, axis=2)
-ball5 = ball5[..., :3]
+#     def __next__(self) -> Optional[Tuple[np.ndarray, int]]:
+#         """
+#         @return tuple containing current image and meta data if available, otherwise None
+#         """
+#         success, frame = self.vid.read()
+#         if(success):
+#             self._index += 1
+#             return (frame, self._index)
+#         else:
+#             raise StopIteration
 
-with mp_pose.Pose(
-    min_detection_confidence=0.5,
-    min_tracking_confidence=0.5,
-    model_complexity=0,
-    smooth_landmarks=True) as pose:
-  
-  # Main Loop
-  while cap.isOpened():
-    success, image = cap.read() #Read Camera Frame
-    ball = ball5
-    ball_alpha = ball_alpha5
-    dim = dim5
-    if not success:
-      print("Ignoring empty camera frame.")
-      # If loading a video, use 'break' instead of 'continue'.
-      continue
-    image_height, image_width, _ = image.shape
+class ANamedTuple(NamedTuple):
+    x: int
+    y: int
 
-    # To improve performance, optionally mark the image as not writeable to
-    # pass by reference.
+class Ball:
+    ball = cv2.imread(r'ball.png', cv2.IMREAD_UNCHANGED)
+    ballImage = 0
+    ballAlpha = 0
+    ballDim = 0
+    # parameterized constructor
+    def __init__(self, scale_percent):
+        self.ballDim = ((int(self.ball.shape[1] * scale_percent / 100)), int(self.ball.shape[0] * scale_percent / 100))
+        self.ballImage = cv2.resize(self.ball, self.ballDim, interpolation = cv2.INTER_AREA)
+        self.ballAlpha = self.ballImage[..., 3] / 255.0
+        self.ballAlpha = np.repeat(self.ballAlpha[..., np.newaxis], 3, axis=2)
+        self.ballImage = self.ballImage[..., :3]
 
-    # Draw the pose annotation on the image.
-    if val == 32 and not record_pose:
-      counting_down = True # if sendOrRecieve is Recieve
-      counting_start = time.time()
-    image.flags.writeable = True 
-    if counting_down:
-      time_diff = round(time.time() - counting_start)
-      if time_diff == 0:
-        ball = ball20
-        ball_alpha = ball_alpha20
-        dim = dim20
-      elif time_diff == 1:
-        ball = ball10
-        ball_alpha = ball_alpha10
-        dim = dim10
+def mediapipe_pose_est():
+  # Initialize function global variables
+  record_pose = False
+  record_start = 0
+  val = 0
+  counting_down = False
+  # Init Pose Bool
+  init_pose_bool = False    
+  init_pose = 0
+  final_pose = 0
+  finalX = 0
+  finalY = 0
 
-      if time_diff >= 3:
-        record_pose = True
-        record_start = time.time()
-        counting_down = False
+  # Grab ball images to super-impose on images
+  ball10, ball5, ball2_5 = Ball(10), Ball(5), Ball(2_5)
 
-    # We want to record the pose data
-    if record_pose:
-      image.flags.writeable = False
-      image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-      results = pose.process(image)
-      mp_drawing.draw_landmarks(
-          image,
-          results.pose_landmarks,
-          mp_pose.POSE_CONNECTIONS,
-          landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style())
-      if not init_pose_bool:
-        init_pose = results.pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_WRIST]
-        init_pose_bool = True 
-      # Flip the image horizontally for a selfie-view display.
-      deltaT = time.time() - record_start
-      if deltaT > 2:
-        final_pose = results.pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_WRIST]
-        record_pose = False
-        init_pose_bool = False
-        finalX, finalY = physicsCalc(init_pose,final_pose, deltaT)
+  # Pre-process input data or get a camera stream ready
+  cam = cv2.VideoCapture(0)
+  cam.set(3, 1280)
+  cam.set(4, 720)
 
-    # Super impose ball on frame
-    ex = max(min(int(finalX*image.shape[1])-dim[0]//2, image.shape[1]-dim[0]), 0)
-    ey = max(min(int(finalY*image.shape[0])-dim[1]//2, image.shape[0]-dim[1]), 0)
-    # Add Ball to image
-    imageBeforeBall = cv2.flip(cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation = cv2.INTER_AREA), 1)
-    image[ey:ey+dim[1], ex:ex+dim[0], :] = image[ey:ey+dim[1], ex:ex+dim[0], :] * (1 - ball_alpha) + ball * ball_alpha
-    image = cv2.flip(image,1)
-    if counting_down:
-      image = cv2.putText(image,str(3 - round(time.time() - counting_start)), (image.shape[1]//2-200, image.shape[0]//2+100), cv2.FONT_HERSHEY_SIMPLEX, 16, (255, 0, 0), 70, cv2.LINE_AA)
-    # Display annotated image
-    image = cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation = cv2.INTER_AREA)
-    image = np.concatenate((image, imageBeforeBall), axis=1)
-    cv2.imshow('MediaPipe Pose', image)
-    val = cv2.waitKey(1)
-cap.release()
+  with mp_pose.Pose(
+      min_detection_confidence=0.5,
+      min_tracking_confidence=0.5,
+      model_complexity=0,
+      smooth_landmarks=True) as pose:
+    
+    # Main Loop
+    while cam.isOpened():
+      success, image = cam.read() #Read Camera Frame
+      ball = ball2_5.ballImage
+      ball_alpha = ball2_5.ballAlpha
+      dim = ball2_5.ballDim
+      if not success:
+        print("Ignoring empty camera frame.")
+        # If loading a video, use 'break' instead of 'continue'.
+        continue
+
+      # To improve performance, optionally mark the image as not writeable to
+      # pass by reference.
+
+      # SpaceBar is hit let's annotate pose on the image.
+      if val == 32 and not record_pose:
+          counting_down = True # if sendOrRecieve is Recieve
+          counting_start = time.time()
+      image.flags.writeable = True 
+      if counting_down:
+          time_diff = round(time.time() - counting_start)
+          if time_diff == 0:
+              ball = ball10.ballImage
+              ball_alpha = ball10.ballAlpha
+              dim = ball10.ballDim
+          elif time_diff == 1:
+              ball = ball5.ballImage
+              ball_alpha = ball5.ballAlpha
+              dim = ball5.ballDim
+
+          if time_diff >= 3:
+              record_pose = True
+              record_start = time.time()
+              counting_down = False
+
+      # We want to record the pose data
+      if record_pose:
+        image.flags.writeable = False
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        results = pose.process(image)
+        mp_drawing.draw_landmarks(
+            image,
+            results.pose_landmarks,
+            mp_pose.POSE_CONNECTIONS,
+            landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style())
+        if not init_pose_bool:
+          init_pose = results.pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_WRIST]
+          init_pose_bool = True 
+        # Flip the image horizontally for a selfie-view display.
+        deltaT = time.time() - record_start
+        if deltaT > 2:
+          final_pose = results.pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_WRIST]
+          record_pose = False
+          init_pose_bool = False
+          finalX, finalY = physicsCalc(init_pose,final_pose, deltaT)
+
+      # Super impose ball on frame
+      ex = max(min(int(finalX*image.shape[1])-dim[0]//2, image.shape[1]-dim[0]), 0)
+      ey = max(min(int(finalY*image.shape[0])-dim[1]//2, image.shape[0]-dim[1]), 0)
+      # Add Ball to image
+      imageBeforeBall = cv2.flip(cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation = cv2.INTER_AREA), 1)
+      image[ey:ey+dim[1], ex:ex+dim[0], :] = image[ey:ey+dim[1], ex:ex+dim[0], :] * (1 - ball_alpha) + ball * ball_alpha
+      image = cv2.flip(image,1)
+      if counting_down:
+        image = cv2.putText(image,str(3 - round(time.time() - counting_start)), (image.shape[1]//2-200, image.shape[0]//2+100), cv2.FONT_HERSHEY_SIMPLEX, 16, (255, 0, 0), 70, cv2.LINE_AA)
+      # Display annotated image
+      image = cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation = cv2.INTER_AREA)
+      image = np.concatenate((image, imageBeforeBall), axis=1)
+      cv2.imshow('MediaPipe Pose', image)
+      val = cv2.waitKey(1)
+
+if __name__ == "__main__":
+    mediapipe_pose_est()
