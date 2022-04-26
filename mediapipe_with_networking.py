@@ -161,7 +161,7 @@ def sendRoutine(piClient: PiClient):
                 if not image.flags['C_CONTIGUOUS']:
                     image = np.ascontiguousarray(image)
                 
-                piClient.sendSocket.send(b'Hello World!', group='images')
+                piClient.sendSocket.send(image, group='images')
                 val = cv2.waitKey(1)
                 print("END")
                 # time.sleep(1)
@@ -171,13 +171,10 @@ def recvRoutine(piClient: PiClient):
     while piClient.running:
         try:
             msg = piClient.recvSocket.recv()
-            print(msg)
-            """
             image = np.frombuffer(msg, dtype='uint8')
             image.reshape((720, 1280, 3))
 
             cv2.imshow('MediaPipe Pose', image)
-            """
         except zmq.ZMQError as e:
             pass
 

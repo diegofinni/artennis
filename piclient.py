@@ -70,8 +70,8 @@ class PiClient:
 
         # Public fields
         self.running = False
-        self.sendSocket = self.__makeSender(myAddr, myPort)
-        self.recvSocket = self.__makeReceiver(otherAddr, otherPort)
+        self.sendSocket = self.__makeSender(otherAddr, otherPort)
+        self.recvSocket = self.__makeReceiver(myAddr, myPort)
 
 ######### Public Methods ######################################################
 
