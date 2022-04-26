@@ -67,12 +67,13 @@ class PiClient:
         # Private fields        
         self.__sendRoutine = None
         self.__recvRoutine = None
+        self.__maxBufSize = 1200
+        self.__sendSocket = self.__makeSender()
+        self.__otherPlayer = (otherAddr, otherPort)
+        self.__recvSocket = self.__makeReceiver(myAddr, myPort)
 
         # Public fields
         self.running = False
-        self.sendSocket = self.__makeSender()
-        self.otherPlayer = (otherAddr, otherPort)
-        self.recvSocket = self.__makeReceiver(myAddr, myPort)
 
 ######### Public Methods ######################################################
 
@@ -109,6 +110,21 @@ class PiClient:
             print("Recv routine doesn't have correct signature, exitting...")
             exit()
         self.__recvRoutine = userRecvRoutine
+    
+    def sendPacket(self, packet: GamePacket):
+        buf = GamePacket.serialize(packet)
+        self.__sendSocket.sendto(buf, self.__otherPlayer)
+
+    def recvPacket(self):
+        buf, addr = self.__recvSocket.recvfrom(self.__maxBufSize)
+        if addr[0] != self.__otherPlayer[0]:
+            print("Unexpected sender, exiting...")
+            exit()
+        elif len(buf) % GamePacket.size != 0:
+            print("Packet of unexpected size, exiting...")
+            exit()
+        buf = buf[len(buf) - GamePacket.size:]
+        return GamePacket.deserialize(buf)
 
 ######### Private Methods #####################################################
 
@@ -122,8 +138,8 @@ class PiClient:
 
     def __close(self):
         self.running = False
-        self.sendSocket.close()
-        self.recvSocket.close()
+        self.__sendSocket.close()
+        self.__recvSocket.close()
         self.__recvThread.join()
 
 ######### Example Usage #######################################################
@@ -132,22 +148,15 @@ def sendRoutine(piClient: PiClient):
     counter = 0
     while counter < 10:
         packet = GamePacket(0, 0, 0, 0, 0, 0)
-        buf = GamePacket.serialize(packet)
-        piClient.sendSocket.sendto(buf, piClient.otherPlayer)
+        piClient.sendPacket(packet)
         time.sleep(1)
         counter += 1
 
 def recvRoutine(piClient: PiClient):
     while piClient.running:
         try:
-            msg, addr = piClient.recvSocket.recvfrom(1024)
-            if len(msg) % 24 != 0:
-                print("Corrupted maybe?")
-                exit()
-            else:
-                msg = msg[len(msg) - 24:]
-            packet = GamePacket.deserialize(msg)
-            print(packet)
+            packet = piClient.recvPacket()
+            print(packet, type(packet))
         except Exception as e:
             print(e)
 

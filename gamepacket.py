@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import pickle
+import time
 
 @dataclass
 class GamePacket:
@@ -36,9 +37,3 @@ class GamePacket:
         minY = int.from_bytes(buf[16:20], 'little')
         maxY = int.from_bytes(buf[20:24], 'little')
         return GamePacket(ballX, ballY, minX, maxX, minY, maxY)
-
-if __name__ == "__main__":
-    test = GamePacket(1000, 1000, 1000, 1000, 1000, 1000)
-    buf = GamePacket.serialize(test)
-    final = GamePacket.deserialize(buf)
-    print(final)
