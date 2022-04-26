@@ -61,8 +61,8 @@ class CameraStreamInput:
     def __init__(self):
         self.vid = cv2.VideoCapture(0, cv2.CAP_V4L2)
         self.vid.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-        self.vid.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        self.vid.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        self.vid.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        self.vid.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
         self._index = 0
 
     def __iter__(self):
