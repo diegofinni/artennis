@@ -141,6 +141,11 @@ def recvRoutine(piClient: PiClient):
     while piClient.running:
         try:
             msg, addr = piClient.recvSocket.recvfrom(1024)
+            if len(msg) % 24 != 0:
+                print("Corrupted maybe?")
+                exit()
+            else:
+                msg = msg[len(msg) - 24:]
             packet = GamePacket.deserialize(msg)
             print(packet)
         except Exception as e:
