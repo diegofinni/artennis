@@ -1,7 +1,8 @@
 ######### Imports #############################################################
 
 import sys
-import zmq
+import socket
+from gamepacket import GamePacket
 import time
 import threading
 from inspect import signature
@@ -64,13 +65,13 @@ class PiClient:
         assert isinstance(otherPort, int)
 
         # Private fields        
-        self.__context = zmq.Context()
         self.__sendRoutine = None
         self.__recvRoutine = None
 
         # Public fields
         self.running = False
-        self.sendSocket = self.__makeSender(otherAddr, otherPort)
+        self.sendSocket = self.__makeSender()
+        self.otherPlayer = (otherAddr, otherPort)
         self.recvSocket = self.__makeReceiver(myAddr, myPort)
 
 ######### Public Methods ######################################################
@@ -82,10 +83,9 @@ class PiClient:
         
         self.running = True
         self.__recvThread = threading.Thread(target=self.__recvRoutine,
-                                           args=(self,))
+                                             args=(self,))
         self.__recvThread.start()
         self.__sendRoutine(self)
-        
         self.__close()
 
     def setSendRoutine(self, userSendRoutine):
@@ -112,50 +112,39 @@ class PiClient:
 
 ######### Private Methods #####################################################
 
-    def __makeSender(self, otherAddr, otherPort):
-        connectString = "udp://{}:{}".format(otherAddr, str(otherPort))
-        radio = self.__context.socket(zmq.RADIO)
-        radio.setsockopt(zmq.CONFLATE, 1)
-        radio.connect(connectString)
-        time.sleep(1)
-        return radio
+    def __makeSender(self):
+        return socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     def __makeReceiver(self, myAddr, myPort):
-        connectString = "udp://{}:{}".format(myAddr, str(myPort))
-        dish = self.__context.socket(zmq.DISH)
-        dish.setsockopt(zmq.CONFLATE, 1)
-        dish.bind(connectString)
-        dish.join("images")
-        time.sleep(1)
-        return dish
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind((myAddr, myPort))
+        return sock
 
     def __close(self):
-        print(1)
         self.running = False
-        print(1)
-        self.__context.destroy()
-        print(1)
+        self.sendSocket.close()
+        self.recvSocket.close()
         self.__recvThread.join()
-        print(1)
 
 ######### Example Usage #######################################################
 
 def sendRoutine(piClient: PiClient):
     counter = 0
     while counter < 10:
-        piClient.sendSocket.send(b"Hello World!", group="images")
+        packet = GamePacket(0, 0, 0, 0, 0, 0)
+        buf = GamePacket.serialize(packet)
+        piClient.sendSocket.sendto(buf, piClient.otherPlayer)
         time.sleep(1)
         counter += 1
 
 def recvRoutine(piClient: PiClient):
     while piClient.running:
         try:
-            msg = piClient.recvSocket.recv()
-            print(msg)
-            print(type(msg))
-        except zmq.ZMQError as e:
-            print("error in receiving")
-            pass
+            msg, addr = piClient.recvSocket.recvfrom(1024)
+            packet = GamePacket.deserialize(msg)
+            print(packet)
+        except Exception as e:
+            print(e)
 
 def main():
     if len(sys.argv) != 5:
