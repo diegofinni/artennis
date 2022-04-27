@@ -6,7 +6,6 @@ from gamepacket import GamePacket
 import time
 import threading
 from inspect import signature
-import datetime
 
 first_packet = False
 
@@ -14,7 +13,7 @@ def sendRoutine(piClient: PiClient):
     global first_packet
     while piClient.running:
         if not first_packet:
-            packet = GamePacket(10000,10000,10000,10000, 10000, 10000)#datetime.datetime.now().second, datetime.datetime.now().microsecond)
+            packet = GamePacket(10000,10000,10000,10000,10000,10000)
             piClient.sendPacket(packet)
             print('Waiting')
             time.sleep(1)
@@ -30,7 +29,7 @@ def recvRoutine(piClient: PiClient):
                 first_packet = True
             else:
                 tiny_yolo_video.ballRecieved(packet)
-            print('RECIEVING', packet)
+            print(packet)
         except Exception as e:
             print(e)
     

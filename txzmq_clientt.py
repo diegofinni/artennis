@@ -25,17 +25,21 @@ from txzmq import ZmqEndpoint, ZmqFactory, ZmqPubConnection, ZmqSubConnection
 
 
 cap = cv2.VideoCapture(0)
+cap.set(3, 1280)
+cap.set(4, 720)
 
 parser = OptionParser("")
 parser.add_option("-m", "--method", dest="method", help="0MQ socket connection: bind|connect")
 parser.add_option("-e", "--endpoint", dest="endpoint", help="0MQ Endpoint")
 parser.add_option("-M", "--mode", dest="mode", help="Mode: publisher|subscriber")
-parser.set_defaults(method="connect", endpoint="epgm://eth1;239.0.5.3:10011")
+parser.set_defaults(method="connect", endpoint="epgm://wlan0;172.26.165.132:10011")
 
 (options, args) = parser.parse_args()
 
 zf = ZmqFactory()
-e = ZmqEndpoint(options.method, options.endpoint)
+e = ZmqEndpoint(options.method, "epgm://127.0.0.1;172.26.165.132:10011")
+# e = ZmqEndpoint(options.method, "ipc://wlan0;localhost:5555")
+# e = ZmqEndpoint(options.method, "ipc:///tmp/sock")
 
 if options.mode == "publisher":
     s = ZmqPubConnection(zf, e)
@@ -48,7 +52,7 @@ if options.mode == "publisher":
         print("publishing %r", np_bytes)
         s.publish(np_bytes.getvalue())
 
-        reactor.callLater(.1, publish)
+        reactor.callLater(.05, publish)
 
     publish()
 else:
