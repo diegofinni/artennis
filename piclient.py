@@ -1,7 +1,8 @@
 ######### Imports #############################################################
 
 import sys
-import zmq
+import socket
+from gamepacket import GamePacket
 import time
 import threading
 from inspect import signature
@@ -18,40 +19,17 @@ for each PiClient must be the inverse of the PiClient that it is working with
 
 Runtime operation:
 
-The PiClient simultaneously sends and receives messages to the other PiClient by
-utilizing two different threads, one receiving, and one sending. These threads
-are made when run() is called, and closed when close() is called.
+The PiClient simultaneously sends and receives messages to the other PiClient
+by utilizing two different threads, one receiving, and one sending. The sending
+thread is the same one where piClient.run() is called. When the send routine
+ends, themain thread (sender thread) will terminate the recv thread and then
+return from run()
 
-Socket types:
+send/recv routines:
 
-The sockets being used are RADIO DISH zmq sockets. These sockets allow the
-PiClient to use the zmq.CONFLATE option for its sockets. This option sets the
-receive buffer to have a packet size of 1. This means that if the sender sends
-more than one packet before the receiver reads anything, then all but the last
-packet are dropped. This should help substantially with lag.
-
-Network protocols:
-
-PiClient uses the UDP protocol which the RADIO DISH socket types are made to
-officially support. UDP was selected so that lost packets were ignored and
-not retransmitted like they would be in TCP
-
-Routine setting:
-
-The user must dictate what the sending and receiving routines are by writing
-the functions themselves and calling the setSendRoutine() and setRecvRoutine()
-functions. The signature of the routine functions must exactly match this
-
-routine(piClient: zmq.sugar.socket.Socket): -> None
-
-If the signature doesn't match, the program will exit. Both routines must be
-set before run is called or the program will exit. Once the routines are set
-and run is called, you must simply call close before exitting. Look at the
-"Example Usage" section to see what an example send and recv routine looks like
-
-The only fields accessible by user routines are the send and recv socket and
-the running boolean which is used to test if the routine should continue
-running. This is set to false when close() is called
+The send and recv routines that the user specifies have specific required
+signatures that are checked at runtime. Check the "Example Usage" section
+of this file to see what these routines should look like
 
 """
 
@@ -64,14 +42,15 @@ class PiClient:
         assert isinstance(otherPort, int)
 
         # Private fields        
-        self.__context = zmq.Context()
         self.__sendRoutine = None
         self.__recvRoutine = None
+        self.__maxBufSize = 1200
+        self.__sendSocket = self.__makeSender()
+        self.__otherPlayer = (otherAddr, otherPort)
+        self.__recvSocket = self.__makeReceiver(myAddr, myPort)
 
         # Public fields
         self.running = False
-        self.sendSocket = self.__makeSender(otherAddr, otherPort)
-        self.recvSocket = self.__makeReceiver(myAddr, myPort)
 
 ######### Public Methods ######################################################
 
@@ -82,10 +61,9 @@ class PiClient:
         
         self.running = True
         self.__recvThread = threading.Thread(target=self.__recvRoutine,
-                                           args=(self,))
+                                             args=(self,))
         self.__recvThread.start()
         self.__sendRoutine(self)
-        
         self.__close()
 
     def setSendRoutine(self, userSendRoutine):
@@ -109,53 +87,55 @@ class PiClient:
             print("Recv routine doesn't have correct signature, exitting...")
             exit()
         self.__recvRoutine = userRecvRoutine
+    
+    def sendPacket(self, packet: GamePacket):
+        buf = GamePacket.serialize(packet)
+        self.__sendSocket.sendto(buf, self.__otherPlayer)
+
+    def recvPacket(self):
+        buf, addr = self.__recvSocket.recvfrom(self.__maxBufSize)
+        if addr[0] != self.__otherPlayer[0]:
+            print("Unexpected sender, exiting...")
+            exit()
+        elif len(buf) % GamePacket.size != 0:
+            print("Packet of unexpected size, exiting...")
+            exit()
+        buf = buf[len(buf) - GamePacket.size:]
+        return GamePacket.deserialize(buf)
 
 ######### Private Methods #####################################################
 
-    def __makeSender(self, otherAddr, otherPort):
-        connectString = "udp://{}:{}".format(otherAddr, str(otherPort))
-        radio = self.__context.socket(zmq.RADIO)
-        radio.setsockopt(zmq.CONFLATE, 1)
-        radio.connect(connectString)
-        time.sleep(1)
-        return radio
+    def __makeSender(self):
+        return socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     def __makeReceiver(self, myAddr, myPort):
-        connectString = "udp://{}:{}".format(myAddr, str(myPort))
-        dish = self.__context.socket(zmq.DISH)
-        dish.setsockopt(zmq.CONFLATE, 1)
-        dish.bind(connectString)
-        dish.join("images")
-        time.sleep(1)
-        return dish
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind((myAddr, myPort))
+        return sock
 
     def __close(self):
-        print(1)
         self.running = False
-        print(1)
-        self.__context.destroy()
-        print(1)
+        self.__sendSocket.close()
+        self.__recvSocket.close()
         self.__recvThread.join()
-        print(1)
 
 ######### Example Usage #######################################################
 
 def sendRoutine(piClient: PiClient):
     counter = 0
     while counter < 10:
-        piClient.sendSocket.send(b"Hello World!", group="images")
+        packet = GamePacket(0, 0, 0, 0, 0, 0)
+        piClient.sendPacket(packet)
         time.sleep(1)
         counter += 1
 
 def recvRoutine(piClient: PiClient):
     while piClient.running:
         try:
-            msg = piClient.recvSocket.recv()
-            print(msg)
-            print(type(msg))
-        except zmq.ZMQError as e:
-            print("error in receiving")
-            pass
+            packet = piClient.recvPacket()
+            print(packet, type(packet))
+        except Exception as e:
+            print(e)
 
 def main():
     if len(sys.argv) != 5:
