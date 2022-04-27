@@ -10,7 +10,7 @@ import math
 from typing import Optional, Tuple, NamedTuple
 import piclient
 from gamepacket import GamePacket
-
+from piclient import PiClient
 
 
 labels = ["person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck",
@@ -58,33 +58,37 @@ class Ball:
 
 ballx = 0
 bally = 0
-opponentImage = np.zeros((720, 1280, 3))
+opponentImage = np.zeros((720, 1280, 3), np.uint8)
 counting_down = False
 counting_start = 0
 record_pose = False
 ball_received = False
+displayBall = False
 
 def ballRecieved(packet: GamePacket):
-    global ballx, bally, opponentImage, counting_down, counting_start, record_pose
-    if (packet.ballX == -1 and not counting_down and not record_pose and ball_received): # done receiving
+    global ballx, bally, opponentImage, counting_down, counting_start, record_pose, ball_received, displayBall
+    if (packet.ballX == 10000 and not counting_down and not record_pose and ball_received): # done receiving
         counting_down = True
+        displayBall = True
         counting_start = time.time()
-    else:
+    elif (packet.ballX != 10000):
         ball_received = True
-        ballx = packet.ballX
-        bally = packet.ballY
+        displayBall = False
+        ballx = packet.ballX/opponentImage.shape[1]
+        bally = packet.ballY/opponentImage.shape[0]
         xmin = packet.minX
         xmax = packet.maxX
         ymin = packet.minY
         ymax = packet.maxY
         hscale = 1
         vscale = 1
-        opponentImage = np.zeros((720, 1280, 3))
+        opponentImage = np.zeros((720, 1280, 3), np.uint8)
         box_start = (int(xmin * hscale), int(ymin *vscale))
         box_end = (int(xmax *hscale), int(ymax*vscale))
         txt_start = (int(xmin *hscale), int(ymin *vscale)-5)
-        color ='red'
-        cv2.rectangle(opponentImage, box_start, box_end, color, 5)
+        color = (255,255,255)
+        opponentImage = cv2.rectangle(opponentImage, box_start, box_end, color, 5)
+
 class CameraStreamInput:
     """
     Initializes a camera stream and returns it as an iterable object
@@ -121,7 +125,6 @@ class ANamedTuple(NamedTuple):
 
 def physicsCalc(init_pose, final_pose, deltaT):
   # physics
-  print()
 
   # Window frame dimensions (adjust for 2m by 2m)
   width = 2 # m scale to human position (window width is 1920 pixels)
@@ -204,9 +207,23 @@ def getRacketPose(image, vboxes, vbox_count, vbox_ids, hscale=1, vscale=1):
     
     return ANamedTuple(x, y)
 
-def tyolo_and_nms_run():
+def getRacketBox(image, vboxes, vbox_count, vbox_ids, hscale=1, vscale=1):
+    class_id = 0
+    x = 0
+    y = 0
+    for count in np.nditer(vbox_count):
+        if(count > 0 and count < 160):
+            for i in range(count):
+                box_id = vbox_ids[0, 0, i, class_id]
+                xmin, xmax, ymin, ymax  = (
+                    vboxes[0, 0, :, box_id] / (2**12))
+                if labels[class_id] ==  "tennis racket":
+                    return xmin, xmax, ymin, ymax
+        class_id += 1
+
+def tyolo_and_nms_run(piClient: PiClient):
     # # Initialize function global variables
-    global ballx, bally, opponentImage, counting_down, counting_start, record_pose
+    global ballx, bally, opponentImage, counting_down, counting_start, record_pose, ball_received, displayBall
     val = 0
     # Init Pose Bool
     init_pose_bool = False    
@@ -214,7 +231,6 @@ def tyolo_and_nms_run():
     final_pose = 0
     finalX = 0
     finalY = 0
-    displayBall = False
     current_pose = ANamedTuple(0, 0)
 
     # Grab ball images to super-impose on images
@@ -263,20 +279,30 @@ def tyolo_and_nms_run():
         nms_outputs.vbox_count_shape, nms_outputs.vbox_count_dtype)
     score_tensor = device.allocate(nms_outputs.score_shape, nms_outputs.score_dtype)
 
-    cv2.namedWindow("frame", cv2.WND_PROP_FULLSCREEN)
-    cv2.setWindowProperty(
-        "frame", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    #cv2.namedWindow("frame", cv2.WND_PROP_FULLSCREEN)
+    #cv2.setWindowProperty(
+    #    "frame", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     float_to_fp32 = lambda num, num_frac: int(num * (2 ** num_frac))
     
     nms_threshold = float_to_fp32(0.5, 12)
     score_threshold = float_to_fp32(0.5, 12)
     
+    #FPS numbers
+    start_time = time.time()
+    
     for image, frame_id in input_camera_stream:
+        # FPS Caluculating
+        fps_value = round(1/(time.time() - start_time))
+        start_time = time.time()
+        
+        #Latency Calulations
+        quadric_latency_total_time = -1
+        
         ball = ball2_5.ballImage
         ball_alpha = ball2_5.ballAlpha
         dim = ball2_5.ballDim
-		# SpaceBar is hit let's annotate pose on the image.
+		    # SpaceBar is hit let's annotate pose on the image.
         if val == 32 and not record_pose:
             counting_down = True # if sendOrRecieve is Recieve
             counting_start = time.time()
@@ -298,6 +324,9 @@ def tyolo_and_nms_run():
                 counting_down = False
 
         if record_pose:
+            #Latency Measure
+            quadric_latency_start_time = time.time()
+            
             # Prepare the frame
             resized_orig_frame = cv2.resize(image, (416, 416))
             resized_reshaped_frame = resized_orig_frame.reshape(input_image_shape)
@@ -319,45 +348,66 @@ def tyolo_and_nms_run():
             vboxes = device.copy_ndarray_from_device(
                 vboxes_device_tensor, nms_outputs.vboxes_shape, nms_outputs.vboxes_dtype)
             image = draw_boxes(image, vboxes, vbox_count, vbox_ids, hscale=image.shape[1] / 416, vscale=image.shape[0] / 416)
+            
+            quadric_latency_total_time = time.time() - quadric_latency_start_time;
 
             if not init_pose_bool:
                 init_pose = getRacketPose(image, vboxes, vbox_count, vbox_ids, hscale=image.shape[1] / 416, vscale=image.shape[0] / 416)
                 init_pose_bool = True 
             deltaT = time.time() - record_start
-            tmp_pose = getRacketPose(image, vboxes, vbox_count, vbox_ids, hscale=image.shape[1] / 416, vscale=image.shape[0] / 416)
-            if tmp_pose.x != 0 and tmp_pose.y != 0:
-                current_pose = tmp_pose
-            packet = GamePacket(ballx, bally, minX=current_pose.x-50/image.width, maxX=current_pose.x+50/image.width,
-                            minY=current_pose.y-50/image.height, maxY=current_pose.y+50/image.height)
-            if deltaT > 4:
+            current_pose = getRacketPose(image, vboxes, vbox_count, vbox_ids, hscale=image.shape[1] / 416, vscale=image.shape[0] / 416)
+            xmin = 0
+            ymin = 0
+            xmax = 0
+            ymax = 0
+            if current_pose.x != 0 or current_pose.y != 0:
+                xmin, xmax, ymin, ymax  = getRacketBox(image, vboxes, vbox_count, vbox_ids, hscale=image.shape[1] / 416, vscale=image.shape[0] / 416)
+                packet = GamePacket(int(ballx*image.shape[1]), int(bally*image.shape[0]), max(int(xmin), 0), min(int(xmax),1280), max(int(ymin), 0), min(int(ymax), 720))
+                print("SENDING: ", packet)
+                piClient.sendPacket(packet)
+            if deltaT > 2:
                 final_pose = getRacketPose(image, vboxes, vbox_count, vbox_ids, hscale=image.shape[1] / 416, vscale=image.shape[0] / 416)
+                if final_pose.x != 0 or current_pose.y != 0:
+                    xmin, xmax, ymin, ymax  = getRacketBox(image, vboxes, vbox_count, vbox_ids, hscale=image.shape[1] / 416, vscale=image.shape[0] / 416)
+                else:
+                    final_pose = current_pose
                 record_pose = False
                 init_pose_bool = False
                 ballx, bally = physicsCalc(init_pose,final_pose, deltaT)
+                
+                packet = GamePacket(max(min(int(ballx*image.shape[1]),0), 1280), max(min(int(bally*image.shape[0]), 0), 720), max(int(xmin), 0), min(int(xmax),1280), max(int(ymin), 0), min(int(ymax), 720))
+                print("SENDING: ", packet)
                 ball_received = False
+                displayBall = False
         else:
-            packet = GamePacket(-1, -1, -1, -1, -1, -1)
-            piclient.sendPacket(packet)
+            packet = GamePacket(10000, 10000, 10000, 10000, 10000, 10000)
+            piClient.sendPacket(packet)
 
         # Super impose ball on frame
-        ex = max(min(int(finalX*image.shape[1])-dim[0]//2, image.shape[1]-dim[0]), 0)
-        ey = max(min(int(finalY*image.shape[0])-dim[1]//2, image.shape[0]-dim[1]), 0)
+        ex = max(min(int(ballx*image.shape[1])-dim[0]//2, image.shape[1]-dim[0]), 0)
+        ey = max(min(int(bally*image.shape[0])-dim[1]//2, image.shape[0]-dim[1]), 0)
         # Add Ball to image
         # imageBeforeBall = cv2.flip(cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation = cv2.INTER_AREA), 1)
         if displayBall:
             image[ey:ey+dim[1], ex:ex+dim[0], :] = image[ey:ey+dim[1], ex:ex+dim[0], :] * (1 - ball_alpha) + ball * ball_alpha
-            opponent_image = opponentImage
+            opponent_image = opponentImage.copy()
         else:
-            opponent_image = opponentImage
+            opponent_image = opponentImage.copy()
             opponent_image[ey:ey+dim[1], ex:ex+dim[0], :] = opponent_image[ey:ey+dim[1], ex:ex+dim[0], :] * (1 - ball_alpha) + ball * ball_alpha
 
         image = cv2.flip(image,1)
+        opponent_image = cv2.flip(opponent_image,1)
         if counting_down:
             image = cv2.putText(image,str(3 - round(time.time() - counting_start)), (image.shape[1]//2-200, image.shape[0]//2+100), cv2.FONT_HERSHEY_SIMPLEX, 16, (255, 0, 0), 70, cv2.LINE_AA)
         # Display annotated image
-        #image = cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation = cv2.INTER_AREA)
-        # image = np.concatenate((image, imageBeforeBall), axis=1)
-        # print(f'PoseX: {poseX}, PoseY: {poseY}')
+        image = cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation = cv2.INTER_AREA)
+        opponent_image = cv2.resize(opponent_image, (opponent_image.shape[1]//2, opponent_image.shape[0]//2), interpolation = cv2.INTER_AREA)
+        image = cv2.hconcat([image, opponent_image])
+        
+        # putting the FPS count on the frame
+        cv2.putText(image, str(fps_value), (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 3, cv2.LINE_AA)
+        # Quadric Latency Time
+        cv2.putText(image, str(quadric_latency_total_time), (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 3, cv2.LINE_AA)
 
         cv2.imshow("frame", image)
         # if cv2.waitKey(1) & 0xFF == ord('q'):
