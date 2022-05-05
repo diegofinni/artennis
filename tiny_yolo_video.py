@@ -64,18 +64,38 @@ counting_start = 0
 record_pose = False
 ball_received = False
 displayBall = False
+score = [0,0]
+advantages = [False, False]
+win = False
+
+def reset():
+    global ballx, bally, opponentImage, counting_down, counting_start, record_pose, ball_received, displayBall
+    ballx = 0
+    bally = 0
+    opponentImage = np.zeros((720, 1280, 3), np.uint8)
+    counting_down = False
+    counting_start = 0
+    record_pose = False
+    ball_received = False
+    displayBall = False
+    
 
 def ballRecieved(packet: GamePacket):
-    global ballx, bally, opponentImage, counting_down, counting_start, record_pose, ball_received, displayBall
+    global ballx, bally, opponentImage, counting_down, counting_start, record_pose, ball_received, displayBall, win
     if (packet.ballX == 10000 and not counting_down and not record_pose and ball_received): # done receiving
         counting_down = True
         displayBall = True
         counting_start = time.time()
+    elif (packet.ballX == 20000):
+        win = incrementScore(0)
+        reset()
+        return
     elif (packet.ballX != 10000):
-        ball_received = True
-        displayBall = False
-        ballx = packet.ballX/opponentImage.shape[1]
-        bally = packet.ballY/opponentImage.shape[0]
+        if (packet.ballX != 30000):
+            ball_received = True
+            displayBall = False
+            ballx = packet.ballX/opponentImage.shape[1]
+            bally = packet.ballY/opponentImage.shape[0]
         xmin = packet.minX
         xmax = packet.maxX
         ymin = packet.minY
@@ -85,7 +105,7 @@ def ballRecieved(packet: GamePacket):
         opponentImage = np.zeros((720, 1280, 3), np.uint8)
         box_start = (int(xmin * hscale), int(ymin *vscale))
         box_end = (int(xmax *hscale), int(ymax*vscale))
-        txt_start = (int(xmin *hscale), int(ymin *vscale)-5)
+        # txt_start = (int(xmin *hscale), int(ymin *vscale)-5)
         color = (255,255,255)
         opponentImage = cv2.rectangle(opponentImage, box_start, box_end, color, 5)
 
@@ -122,9 +142,38 @@ class CameraStreamInput:
 class ANamedTuple(NamedTuple):
     x: int
     y: int
+    
+def incrementScore(i):
+    global score, advantages
+    
+    if (score[i] == 0):
+        score[i] = 15
+    elif (score[i] == 15):
+        score[i] = 30
+    elif (score[i] == 30):
+        score[i] = 40
+    elif (score[i] == 40):
+        if (score[0] == score[1]):
+            if (advantages[i] == True):
+                return True
+            elif (advantages[(i+1)%2] == True):
+                advantages[(i+1)%2] = False
+            else:
+                advantages[i] = True
+        else:
+            return True
+    return False
+        
 
 def physicsCalc(init_pose, final_pose, deltaT):
   # physics
+  global ballx, bally
+  
+  print(ballx, bally, init_pose.x+0.2, init_pose.x-0.2, init_pose.y+0.2, init_pose.y-0.2)
+  
+  if (init_pose.x+0.35 <= ballx or init_pose.x-0.35 >= ballx or
+      init_pose.y+0.35 <= bally or init_pose.y-0.35 >= bally):
+    return True, -1, -1
 
   # Window frame dimensions (adjust for 2m by 2m)
   width = 2 # m scale to human position (window width is 1920 pixels)
@@ -167,7 +216,7 @@ def physicsCalc(init_pose, final_pose, deltaT):
   finalX = init_pose.x + deltaX/width
   finalY = init_pose.y - deltaY/height
 
-  return finalX, finalY
+  return False, finalX, finalY
 
 def draw_boxes(image, vboxes, vbox_count, vbox_ids, hscale=1, vscale=1):
     class_id = 0
@@ -223,7 +272,7 @@ def getRacketBox(image, vboxes, vbox_count, vbox_ids, hscale=1, vscale=1):
 
 def tyolo_and_nms_run(piClient: PiClient):
     # # Initialize function global variables
-    global ballx, bally, opponentImage, counting_down, counting_start, record_pose, ball_received, displayBall
+    global ballx, bally, opponentImage, counting_down, counting_start, record_pose, ball_received, displayBall, win
     val = 0
     # Init Pose Bool
     init_pose_bool = False    
@@ -279,9 +328,9 @@ def tyolo_and_nms_run(piClient: PiClient):
         nms_outputs.vbox_count_shape, nms_outputs.vbox_count_dtype)
     score_tensor = device.allocate(nms_outputs.score_shape, nms_outputs.score_dtype)
 
-    #cv2.namedWindow("frame", cv2.WND_PROP_FULLSCREEN)
-    #cv2.setWindowProperty(
-    #    "frame", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    cv2.namedWindow("frame", cv2.WND_PROP_FULLSCREEN)
+    cv2.setWindowProperty(
+        "frame", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     float_to_fp32 = lambda num, num_frac: int(num * (2 ** num_frac))
     
@@ -291,9 +340,22 @@ def tyolo_and_nms_run(piClient: PiClient):
     #FPS numbers
     start_time = time.time()
     
+    blackBars = np.zeros((360, 2560, 3), np.uint8)
+    
+    xmin = 0
+    ymin = 0
+    xmax = 0
+    ymax = 0
+    last_valid_pose = 0
+    record_start = 0
+    
     for image, frame_id in input_camera_stream:
+        if (win):
+            cv2.destroyAllWindows()
+            return
+        
         # FPS Caluculating
-        fps_value = round(1/(time.time() - start_time))
+        fps_value = round(2/(time.time() - start_time))
         start_time = time.time()
         
         #Latency Calulations
@@ -320,12 +382,12 @@ def tyolo_and_nms_run(piClient: PiClient):
 
             if time_diff >= 3:
                 record_pose = True
-                record_start = time.time()
                 counting_down = False
 
         if record_pose:
             #Latency Measure
             quadric_latency_start_time = time.time()
+            fps_value //= 2
             
             # Prepare the frame
             resized_orig_frame = cv2.resize(image, (416, 416))
@@ -353,16 +415,16 @@ def tyolo_and_nms_run(piClient: PiClient):
 
             if not init_pose_bool:
                 init_pose = getRacketPose(image, vboxes, vbox_count, vbox_ids, hscale=image.shape[1] / 416, vscale=image.shape[0] / 416)
+                if (init_pose.x == 0 and init_pose.y == 0):
+                    continue
+                record_start = time.time()
                 init_pose_bool = True 
             deltaT = time.time() - record_start
             current_pose = getRacketPose(image, vboxes, vbox_count, vbox_ids, hscale=image.shape[1] / 416, vscale=image.shape[0] / 416)
-            xmin = 0
-            ymin = 0
-            xmax = 0
-            ymax = 0
             if current_pose.x != 0 or current_pose.y != 0:
+                last_valid_pose = current_pose
                 xmin, xmax, ymin, ymax  = getRacketBox(image, vboxes, vbox_count, vbox_ids, hscale=image.shape[1] / 416, vscale=image.shape[0] / 416)
-                packet = GamePacket(int(ballx*image.shape[1]), int(bally*image.shape[0]), max(int(xmin), 0), min(int(xmax),1280), max(int(ymin), 0), min(int(ymax), 720))
+                packet = GamePacket(30000, 30000, max(int(xmin), 0), min(int(xmax),1280), max(int(ymin), 0), min(int(ymax), 720))
                 print("SENDING: ", packet)
                 piClient.sendPacket(packet)
             if deltaT > 2:
@@ -370,12 +432,21 @@ def tyolo_and_nms_run(piClient: PiClient):
                 if final_pose.x != 0 or current_pose.y != 0:
                     xmin, xmax, ymin, ymax  = getRacketBox(image, vboxes, vbox_count, vbox_ids, hscale=image.shape[1] / 416, vscale=image.shape[0] / 416)
                 else:
-                    final_pose = current_pose
+                    final_pose = last_valid_pose
                 record_pose = False
                 init_pose_bool = False
-                ballx, bally = physicsCalc(init_pose,final_pose, deltaT)
+                miss, ballx, bally = physicsCalc(init_pose,final_pose, deltaT)
                 
-                packet = GamePacket(max(min(int(ballx*image.shape[1]),0), 1280), max(min(int(bally*image.shape[0]), 0), 720), max(int(xmin), 0), min(int(xmax),1280), max(int(ymin), 0), min(int(ymax), 720))
+                if (miss):
+                    win = incrementScore(1)
+                    reset()
+                    packet = GamePacket(20000, 20000, 20000, 20000, 20000, 20000)
+                    piClient.sendPacket(packet)
+                    print("SENDING: ", packet)
+                    continue
+                
+                packet = GamePacket(min(max(int(ballx*image.shape[1]),0), 1280), min(max(int(bally*image.shape[0]), 0), 720), max(int(xmin), 0), min(int(xmax),1280), max(int(ymin), 0), min(int(ymax), 720))
+                piClient.sendPacket(packet)
                 print("SENDING: ", packet)
                 ball_received = False
                 displayBall = False
@@ -404,10 +475,14 @@ def tyolo_and_nms_run(piClient: PiClient):
         opponent_image = cv2.resize(opponent_image, (opponent_image.shape[1]//2, opponent_image.shape[0]//2), interpolation = cv2.INTER_AREA)
         image = cv2.hconcat([image, opponent_image])
         
+        # putting score on frame
+        cv2.putText(image, 'You - Score: {} Adv: {} | Opp - Score: {} Adv: {}'.format(score[0], advantages[0], score[1], advantages[1]), (196, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 3, cv2.LINE_AA)
         # putting the FPS count on the frame
-        cv2.putText(image, str(fps_value), (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 3, cv2.LINE_AA)
+        cv2.putText(image, 'FPS: {}'.format(fps_value), (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
         # Quadric Latency Time
-        cv2.putText(image, str(quadric_latency_total_time), (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 3, cv2.LINE_AA)
+        cv2.putText(image, 'Quadric Latency: {}'.format(quadric_latency_total_time), (15, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
+        
+        image = cv2.resize(image, (2560, 720), interpolation= cv2.INTER_AREA)
 
         cv2.imshow("frame", image)
         # if cv2.waitKey(1) & 0xFF == ord('q'):

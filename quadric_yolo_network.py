@@ -20,6 +20,7 @@ def sendRoutine(piClient: PiClient):
             time.sleep(1)
         else:
             tiny_yolo_video.tyolo_and_nms_run(piClient)
+            piClient.running = False
 
 def recvRoutine(piClient: PiClient):
     global first_packet
@@ -35,14 +36,21 @@ def recvRoutine(piClient: PiClient):
             print(e)
     
 def main():
+    myAddr=0
+    myPort=0
+    otherAddr=0
+    otherPort=0
     if len(sys.argv) != 5:
         print("Usage: myAddr, myPort, otherAddr, otherPort")
-        exit()
-    
-    myAddr = sys.argv[1]
-    myPort = int(sys.argv[2])
-    otherAddr = sys.argv[3]
-    otherPort = int(sys.argv[4])
+        myAddr = '172.26.165.64'
+        myPort = 5555
+        otherAddr = '172.26.165.132'
+        otherPort = 6666
+    else:    
+        myAddr = sys.argv[1]
+        myPort = int(sys.argv[2])
+        otherAddr = sys.argv[3]
+        otherPort = int(sys.argv[4])
 
     pi = PiClient(myAddr, myPort, otherAddr, otherPort)
     pi.setSendRoutine(sendRoutine)
